@@ -1,0 +1,23 @@
+name: reasoning
+description: Reasoning and problem-solving benchmark prompts
+
+prompts:
+  - id: logic_puzzle
+    text: "There are three boxes. One contains only apples, one contains only oranges, and one contains both. All boxes are labeled wrong. You can pick one fruit from one box. Which box should you pick from, and why? Answer concisely."
+    tags: [logic, medium]
+
+  - id: word_problem
+    text: "A train leaves Station A at 9 AM traveling at 60 mph. Another train leaves Station B at 10 AM traveling toward Station A at 80 mph. If the stations are 280 miles apart, at what time do the trains meet? Show your work briefly."
+    tags: [math, medium]
+
+  - id: sequence
+    text: "What comes next in this sequence: 1, 1, 2, 3, 5, 8, 13, ___? Just the number."
+    tags: [math, easy]
+
+  - id: analogy
+    text: "Complete the analogy: Tree is to Forest as Star is to ___? One word answer."
+    tags: [language, easy]
+
+  - id: riddle
+    text: "I speak without a mouth and hear without ears. I have no body, but I come alive with the wind. What am I? One word answer."
+    tags: [riddle, medium]

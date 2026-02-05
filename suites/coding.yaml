@@ -1,0 +1,23 @@
+name: coding
+description: Code generation benchmark prompts
+
+prompts:
+  - id: fizzbuzz
+    text: "Write a Python function called fizzbuzz that prints numbers 1-100, but prints 'Fizz' for multiples of 3, 'Buzz' for multiples of 5, and 'FizzBuzz' for multiples of both. Just the function, no explanation."
+    tags: [python, easy]
+
+  - id: reverse_string
+    text: "Write a Python function that reverses a string without using slicing or built-in reverse methods. Just the function."
+    tags: [python, easy]
+
+  - id: fibonacci
+    text: "Write a Python function that returns the nth Fibonacci number using memoization. Just the function."
+    tags: [python, medium]
+
+  - id: binary_search
+    text: "Write a Python function that implements binary search on a sorted list. Return the index if found, -1 otherwise. Just the function."
+    tags: [python, medium]
+
+  - id: merge_sort
+    text: "Write a Python function that implements merge sort. Just the function."
+    tags: [python, medium]

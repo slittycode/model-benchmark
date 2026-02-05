@@ -1,6 +1,5 @@
 """Integration tests for CLI commands."""
 
-import pytest
 from typer.testing import CliRunner
 
 from mrbench.cli.main import app

@@ -102,10 +102,13 @@ class LlamaCppAdapter(Adapter):
         # Build command: llama-cli -m model.gguf -p "prompt"
         args = [
             binary,
-            "-m", str(model_path),
-            "-p", prompt,
+            "-m",
+            str(model_path),
+            "-p",
+            prompt,
             "--no-display-prompt",  # Don't echo the prompt
-            "-n", "512",  # Max tokens
+            "-n",
+            "512",  # Max tokens
         ]
 
         result = self._executor.run(args)

@@ -104,7 +104,7 @@ def bench_command(
         task = progress.add_task(f"Running {total_jobs} jobs...", total=total_jobs)
 
         for adapter in adapters:
-            caps = adapter.get_capabilities()
+            adapter.get_capabilities()
 
             # Get default model
             models = adapter.list_models()

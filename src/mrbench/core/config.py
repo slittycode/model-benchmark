@@ -119,7 +119,7 @@ def load_config(config_path: Path | None = None) -> MrbenchConfig:
         # Log warning but return defaults
         import warnings
 
-        warnings.warn(f"Failed to load config from {config_path}: {e}")
+        warnings.warn(f"Failed to load config from {config_path}: {e}", stacklevel=2)
         return DEFAULT_CONFIG
 
 

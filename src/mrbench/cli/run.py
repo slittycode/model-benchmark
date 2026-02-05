@@ -91,7 +91,7 @@ def run_command(
         result = adapter.run(prompt_text, options)
     except Exception as e:
         console.print(f"[red]Error running prompt: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if json_output:
         output_data = {

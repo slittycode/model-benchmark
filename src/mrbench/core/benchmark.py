@@ -38,7 +38,7 @@ class BenchmarkSuite:
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
-    def from_yaml(cls, path: Path) -> "BenchmarkSuite":
+    def from_yaml(cls, path: Path) -> BenchmarkSuite:
         """Load suite from YAML file."""
         with open(path) as f:
             data = yaml.safe_load(f)
@@ -95,8 +95,8 @@ class BenchmarkOrchestrator:
 
     def __init__(
         self,
-        registry: "AdapterRegistry",
-        storage: "Storage",
+        registry: AdapterRegistry,
+        storage: Storage,
     ) -> None:
         self._registry = registry
         self._storage = storage

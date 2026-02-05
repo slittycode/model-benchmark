@@ -1,9 +1,8 @@
 """Test benchmark orchestration."""
 
-import pytest
 from pathlib import Path
 
-from mrbench.core.benchmark import BenchmarkSuite, BenchmarkPrompt
+from mrbench.core.benchmark import BenchmarkPrompt, BenchmarkSuite
 
 
 def test_benchmark_prompt_creation():

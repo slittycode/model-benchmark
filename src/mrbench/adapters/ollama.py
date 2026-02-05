@@ -61,7 +61,7 @@ class OllamaAdapter(Adapter):
                 exit_code=127,
                 wall_time_ms=0,
             )
-        return self._executor.run([binary] + args, stdin=stdin)
+        return self._executor.run([binary, *args], stdin=stdin)
 
     def _run_version_check(self) -> str | None:
         """Get ollama version."""
@@ -96,11 +96,7 @@ class OllamaAdapter(Adapter):
         # Check auth status by listing models
         # If we can list models, we're "authenticated" (Ollama doesn't require auth)
         list_result = self._run_command(["list"])
-        if list_result.exit_code == 0:
-            auth_status = "authenticated"
-        else:
-            # Ollama server might not be running
-            auth_status = "unknown"
+        auth_status = "authenticated" if list_result.exit_code == 0 else "unknown"
 
         return DetectionResult(
             detected=True,
@@ -143,7 +139,7 @@ class OllamaAdapter(Adapter):
         # Execute
         if options.stream and options.stream_callback:
             result = self._executor.run(
-                [self._get_binary() or "ollama"] + args[:-1],
+                [self._get_binary() or "ollama", *args[:-1]],
                 stdin=prompt,
                 stream_callback=options.stream_callback,
             )

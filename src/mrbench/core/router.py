@@ -103,9 +103,12 @@ class Router:
                 continue
 
             # Check context constraint
-            if constraints.max_context and caps.max_context:
-                if caps.max_context < constraints.max_context:
-                    continue
+            if (
+                constraints.max_context
+                and caps.max_context
+                and caps.max_context < constraints.max_context
+            ):
+                continue
 
             reasons.append(f"{adapter.name} is available")
             candidates.append((adapter, reasons))
@@ -118,9 +121,7 @@ class Router:
             candidates = self._sort_by_preference(candidates)
         elif self._policy == RoutingPolicy.OFFLINE_ONLY:
             # Filter to offline only (already done in constraints)
-            candidates = [
-                (a, r) for a, r in candidates if a.get_capabilities().offline
-            ]
+            candidates = [(a, r) for a, r in candidates if a.get_capabilities().offline]
         # FASTEST and CHEAPEST would need historical data - stub for now
 
         if not candidates:

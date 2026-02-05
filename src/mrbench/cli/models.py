@@ -71,7 +71,7 @@ def models_command(
         models = adapter.list_models()
     except Exception as e:
         console.print(f"[red]Error listing models: {e}[/red]")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from None
 
     if json_output:
         console.print(json.dumps(models, indent=2))

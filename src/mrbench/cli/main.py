@@ -8,6 +8,7 @@ from rich.console import Console
 import mrbench
 from mrbench.cli.bench import bench_command
 from mrbench.cli.detect import detect_command
+from mrbench.cli.discover import discover_command
 from mrbench.cli.doctor import doctor_command
 from mrbench.cli.models import models_command
 from mrbench.cli.providers import providers_command
@@ -52,6 +53,7 @@ def main(
 # Register commands
 app.command(name="doctor", help="Check prerequisites and show detected providers")(doctor_command)
 app.command(name="detect", help="Run discovery and record capability snapshot")(detect_command)
+app.command(name="discover", help="Discover AI CLI tools and configurations")(discover_command)
 app.command(name="providers", help="List detected providers/adapters")(providers_command)
 app.command(name="models", help="List available models for a provider")(models_command)
 app.command(name="run", help="Run a single prompt against a provider")(run_command)

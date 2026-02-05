@@ -111,6 +111,13 @@ def get_default_registry() -> AdapterRegistry:
         _default_registry.register(GooseAdapter())
         _default_registry.register(OpenCodeAdapter())
 
+        # Local inference adapters
+        from mrbench.adapters.llamacpp import LlamaCppAdapter
+        from mrbench.adapters.vllm import VllmAdapter
+
+        _default_registry.register(LlamaCppAdapter())
+        _default_registry.register(VllmAdapter())
+
     return _default_registry
 
 

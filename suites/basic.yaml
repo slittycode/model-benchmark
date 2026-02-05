@@ -1,0 +1,12 @@
+name: basic
+description: Basic smoke test prompts
+
+prompts:
+  - id: math
+    text: "What is 2 + 2? Answer with just the number."
+  
+  - id: hello
+    text: "Say hello in one word."
+  
+  - id: color
+    text: "What color is the sky on a clear day? One word answer."

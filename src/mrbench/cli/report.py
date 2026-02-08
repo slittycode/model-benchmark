@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, TypedDict
 
 import typer
 from rich.console import Console
@@ -15,6 +15,28 @@ from rich.console import Console
 from mrbench.core.storage import Storage
 
 console = Console()
+
+
+class ProviderJob(TypedDict):
+    """Serialized job details used for report rendering."""
+
+    id: str
+    model: str
+    status: str
+    error: str | None
+    metrics: dict[str, float]
+
+
+class ProviderStats(TypedDict):
+    """Aggregate metrics for a single provider."""
+
+    total_jobs: int
+    completed: int
+    failed: int
+    avg_wall_time_ms: float
+    min_wall_time_ms: float
+    max_wall_time_ms: float
+    avg_ttft_ms: float | None
 
 
 def report_command(
@@ -49,32 +71,36 @@ def report_command(
 
     # Collect metrics
     job_metrics: dict[str, dict[str, float]] = {}
-    for job in jobs:
-        metrics = storage.get_job_metrics(job.id)
-        job_metrics[job.id] = {m.metric_name: m.metric_value for m in metrics}
+    for run_job in jobs:
+        metrics = storage.get_job_metrics(run_job.id)
+        job_metrics[run_job.id] = {m.metric_name: m.metric_value for m in metrics}
 
     # Group by provider
-    providers: dict[str, list[dict]] = {}
-    for job in jobs:
-        if job.provider not in providers:
-            providers[job.provider] = []
+    providers: dict[str, list[ProviderJob]] = {}
+    for run_job in jobs:
+        if run_job.provider not in providers:
+            providers[run_job.provider] = []
 
-        job_data = {
-            "id": job.id,
-            "model": job.model,
-            "status": job.status,
-            "error": job.error_message,
-            "metrics": job_metrics.get(job.id, {}),
+        job_data: ProviderJob = {
+            "id": run_job.id,
+            "model": run_job.model,
+            "status": run_job.status,
+            "error": run_job.error_message,
+            "metrics": job_metrics.get(run_job.id, {}),
         }
-        providers[job.provider].append(job_data)
+        providers[run_job.provider].append(job_data)
 
     # Calculate stats per provider
-    stats: dict[str, dict] = {}
+    stats: dict[str, ProviderStats] = {}
     for provider, pjobs in providers.items():
         wall_times = [
             j["metrics"].get("wall_time_ms", 0) for j in pjobs if j["status"] == "completed"
         ]
-        ttfts = [j["metrics"].get("ttft_ms") for j in pjobs if j["metrics"].get("ttft_ms")]
+        ttfts = [
+            j["metrics"]["ttft_ms"]
+            for j in pjobs
+            if j["status"] == "completed" and "ttft_ms" in j["metrics"]
+        ]
 
         stats[provider] = {
             "total_jobs": len(pjobs),
@@ -136,12 +162,12 @@ def report_command(
             ]
         )
 
-        for job in pjobs:
-            status_icon = "✓" if job["status"] == "completed" else "✗"
-            wall_time = job["metrics"].get("wall_time_ms", 0)
-            lines.append(f"- {status_icon} {job['model']}: {wall_time:.1f}ms")
-            if job["error"]:
-                lines.append(f"  - Error: {job['error'][:100]}")
+        for provider_job in pjobs:
+            status_icon = "✓" if provider_job["status"] == "completed" else "✗"
+            wall_time = provider_job["metrics"].get("wall_time_ms", 0)
+            lines.append(f"- {status_icon} {provider_job['model']}: {wall_time:.1f}ms")
+            if provider_job["error"]:
+                lines.append(f"  - Error: {provider_job['error'][:100]}")
 
         lines.append("")
 

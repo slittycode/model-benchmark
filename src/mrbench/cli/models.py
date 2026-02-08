@@ -58,17 +58,17 @@ def models_command(
         return
 
     # Specific provider
-    adapter = registry.get(provider)
-    if adapter is None:
+    selected_adapter = registry.get(provider)
+    if selected_adapter is None:
         console.print(f"[red]Unknown provider: {provider}[/red]")
         raise typer.Exit(1)
 
-    if not adapter.is_available():
+    if not selected_adapter.is_available():
         console.print(f"[yellow]Provider '{provider}' is not available.[/yellow]")
         raise typer.Exit(1)
 
     try:
-        models = adapter.list_models()
+        models = selected_adapter.list_models()
     except Exception as e:
         console.print(f"[red]Error listing models: {e}[/red]")
         raise typer.Exit(1) from None

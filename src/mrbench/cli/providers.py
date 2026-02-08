@@ -6,7 +6,7 @@ Lists detected providers/adapters.
 from __future__ import annotations
 
 import json
-from typing import Annotated
+from typing import Annotated, TypedDict
 
 import typer
 from rich.console import Console
@@ -15,6 +15,16 @@ from rich.table import Table
 from mrbench.adapters.registry import get_default_registry
 
 console = Console()
+
+
+class ProviderEntry(TypedDict):
+    """Provider details displayed in the providers table/JSON output."""
+
+    name: str
+    display_name: str
+    detected: bool
+    version: str | None
+    offline: bool
 
 
 def providers_command(
@@ -30,7 +40,7 @@ def providers_command(
     """List detected providers/adapters."""
     registry = get_default_registry()
 
-    providers = []
+    providers: list[ProviderEntry] = []
     for adapter in registry.list_all():
         detection = adapter.detect()
 
@@ -38,13 +48,13 @@ def providers_command(
             continue
 
         providers.append(
-            {
-                "name": adapter.name,
-                "display_name": adapter.display_name,
-                "detected": detection.detected,
-                "version": detection.version if detection.detected else None,
-                "offline": adapter.get_capabilities().offline,
-            }
+            ProviderEntry(
+                name=adapter.name,
+                display_name=adapter.display_name,
+                detected=detection.detected,
+                version=detection.version if detection.detected else None,
+                offline=adapter.get_capabilities().offline,
+            )
         )
 
     if json_output:
@@ -65,7 +75,7 @@ def providers_command(
     for p in providers:
         status = "[green]available[/green]" if p["detected"] else "[dim]not found[/dim]"
         ptype = "[blue]local[/blue]" if p["offline"] else "[magenta]cloud[/magenta]"
-        version = p.get("version") or "-"
+        version = p["version"] if p["version"] is not None else "-"
         table.add_row(p["name"], p["display_name"], status, ptype, version)
 
     console.print(table)

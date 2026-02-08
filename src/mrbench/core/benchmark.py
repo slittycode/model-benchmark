@@ -6,13 +6,15 @@ Coordinates running benchmark suites across multiple providers.
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import yaml
 
 if TYPE_CHECKING:
+    from mrbench.adapters.base import Adapter
     from mrbench.adapters.registry import AdapterRegistry
     from mrbench.core.storage import Storage
 
@@ -41,10 +43,12 @@ class BenchmarkSuite:
     def from_yaml(cls, path: Path) -> BenchmarkSuite:
         """Load suite from YAML file."""
         with open(path) as f:
-            data = yaml.safe_load(f)
+            loaded_data = yaml.safe_load(f)
 
-        prompts = []
-        for p in data.get("prompts", []):
+        data = loaded_data if isinstance(loaded_data, dict) else {}
+
+        prompts: list[BenchmarkPrompt] = []
+        for p in cast(list[dict[str, Any]], data.get("prompts", [])):
             prompts.append(
                 BenchmarkPrompt(
                     id=p.get("id", f"prompt_{len(prompts)}"),
@@ -106,7 +110,7 @@ class BenchmarkOrchestrator:
         suite: BenchmarkSuite,
         providers: list[str] | None = None,
         models: dict[str, str] | None = None,
-        on_progress: Any | None = None,
+        on_progress: Callable[[str, str, int], None] | None = None,
     ) -> BenchmarkRun:
         """Run a benchmark suite.
 
@@ -126,13 +130,13 @@ class BenchmarkOrchestrator:
         benchmark_run = BenchmarkRun(run_id=run.id, suite_name=suite.name)
 
         # Get adapters
+        adapters: list[Adapter]
         if providers:
-            adapters = [
-                self._registry.get(p)
-                for p in providers
-                if self._registry.get(p) and self._registry.get(p).is_available()  # type: ignore
-            ]
-            adapters = [a for a in adapters if a is not None]
+            adapters = []
+            for provider_name in providers:
+                adapter = self._registry.get(provider_name)
+                if adapter is not None and adapter.is_available():
+                    adapters.append(adapter)
         else:
             adapters = self._registry.get_available()
 

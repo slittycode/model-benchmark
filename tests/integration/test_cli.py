@@ -1,10 +1,17 @@
 """Integration tests for CLI commands."""
 
+import re
+
 from typer.testing import CliRunner
 
 from mrbench.cli.main import app
 
 runner = CliRunner()
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI escape sequences for stable help-text assertions."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
 class TestDoctorCommand:
@@ -69,9 +76,9 @@ class TestHelpMessages:
     def test_main_help(self):
         result = runner.invoke(app, ["--help"])
         assert result.exit_code == 0
-        assert "doctor" in result.stdout
+        assert "doctor" in _strip_ansi(result.stdout)
 
     def test_run_help(self):
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
-        assert "--provider" in result.stdout
+        assert "--provider" in _strip_ansi(result.stdout)

@@ -12,6 +12,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from types import TracebackType
 from typing import Any
 
 from mrbench.core.config import get_default_data_path
@@ -185,6 +186,19 @@ class Storage:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+
+    def __enter__(self) -> Storage:
+        """Support context-manager usage for deterministic connection cleanup."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
+        """Close the connection on context exit."""
+        self.close()
 
     def list_tables(self) -> list[str]:
         """List all tables in database."""

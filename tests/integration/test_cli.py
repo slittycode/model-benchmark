@@ -1,10 +1,13 @@
 """Integration tests for CLI commands."""
 
+import json
 import re
 
 from typer.testing import CliRunner
 
+from mrbench.cli import report as report_module
 from mrbench.cli.main import app
+from mrbench.core.storage import Storage
 
 runner = CliRunner()
 
@@ -82,3 +85,32 @@ class TestHelpMessages:
         result = runner.invoke(app, ["run", "--help"])
         assert result.exit_code == 0
         assert "--provider" in _strip_ansi(result.stdout)
+
+
+class TestReportCommand:
+    """Tests for mrbench report."""
+
+    def test_report_json_preserves_zero_ttft_metric(self, monkeypatch, tmp_path):
+        db_path = tmp_path / "report.db"
+        storage = Storage(db_path)
+
+        run = storage.create_run(suite_path="suites/basic.yaml")
+        job = storage.create_job(
+            run_id=run.id,
+            provider="fake",
+            model="fake-fast",
+            prompt_hash="abc123",
+        )
+        storage.start_job(job.id)
+        storage.complete_job(job.id, exit_code=0)
+        storage.add_metric(job.id, "wall_time_ms", 12.5, "ms")
+        storage.add_metric(job.id, "ttft_ms", 0.0, "ms")
+        storage.complete_run(run.id)
+
+        monkeypatch.setattr(report_module, "Storage", lambda: storage)
+
+        result = runner.invoke(app, ["report", run.id, "--format", "json"])
+        assert result.exit_code == 0
+
+        payload = json.loads(_strip_ansi(result.stdout))
+        assert payload["providers"]["fake"]["avg_ttft_ms"] == 0.0

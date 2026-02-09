@@ -5,6 +5,9 @@ import re
 
 from typer.testing import CliRunner
 
+from mrbench.adapters.base import AdapterCapabilities, DetectionResult
+from mrbench.cli import detect as detect_module
+from mrbench.cli import discover as discover_module
 from mrbench.cli import report as report_module
 from mrbench.cli.main import app
 from mrbench.core.storage import Storage
@@ -71,6 +74,98 @@ class TestRouteCommand:
 
         result = runner.invoke(app, ["route", "--prompt", str(prompt_file)])
         assert result.exit_code == 0
+
+
+class TestDiscoverCommand:
+    """Tests for mrbench discover."""
+
+    def test_discover_json_check_auth_flag(self, monkeypatch):
+        calls: list[bool] = []
+
+        class _FakeDetector:
+            def discover_cli_tools(self, check_auth: bool = False):
+                calls.append(check_auth)
+                return {
+                    "installed": [
+                        {
+                            "name": "codex",
+                            "path": "/bin/codex",
+                            "has_config": False,
+                            "config_path": None,
+                            "auth_status": "authenticated",
+                        }
+                    ],
+                    "configured": [],
+                    "ready": [],
+                    "not_found": [],
+                }
+
+        monkeypatch.setattr(discover_module, "ConfigDetector", lambda: _FakeDetector())
+
+        result = runner.invoke(app, ["discover", "--json", "--check-auth"])
+        assert result.exit_code == 0
+        assert calls == [True]
+
+        payload = json.loads(_strip_ansi(result.stdout))
+        assert payload["installed"][0]["name"] == "codex"
+
+
+class TestDetectCommand:
+    """Tests for mrbench detect."""
+
+    class _FakeAdapter:
+        name = "fake-provider"
+        display_name = "Fake Provider"
+
+        def detect(self) -> DetectionResult:
+            return DetectionResult(
+                detected=True,
+                binary_path="/bin/fake-provider",
+                version="1.2.3",
+                auth_status="authenticated",
+                trusted=True,
+            )
+
+        def list_models(self) -> list[str]:
+            raise RuntimeError("no model listing")
+
+        def get_capabilities(self) -> AdapterCapabilities:
+            return AdapterCapabilities(
+                name=self.name,
+                streaming=True,
+                tool_calling=False,
+                max_tokens=4096,
+                max_context=32768,
+                offline=False,
+            )
+
+    class _FakeRegistry:
+        def list_all(self):
+            return [TestDetectCommand._FakeAdapter()]
+
+    def test_detect_json_handles_model_listing_failures(self, monkeypatch):
+        monkeypatch.setattr(detect_module, "get_default_registry", lambda: self._FakeRegistry())
+
+        result = runner.invoke(app, ["detect", "--json"])
+        assert result.exit_code == 0
+
+        payload = json.loads(_strip_ansi(result.stdout))
+        assert len(payload["providers"]) == 1
+        assert payload["providers"][0]["name"] == "fake-provider"
+        assert payload["providers"][0]["models"] == []
+
+    def test_detect_write_outputs_capabilities_file(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(detect_module, "get_default_registry", lambda: self._FakeRegistry())
+
+        result = runner.invoke(app, ["detect", "--write", "--output-dir", str(tmp_path)])
+        assert result.exit_code == 0
+
+        cache_file = tmp_path / "capabilities.json"
+        assert cache_file.exists()
+
+        payload = json.loads(cache_file.read_text())
+        assert len(payload["providers"]) == 1
+        assert payload["providers"][0]["display_name"] == "Fake Provider"
 
 
 class TestHelpMessages:

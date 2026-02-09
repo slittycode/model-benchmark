@@ -143,9 +143,9 @@ def bench_command(
 
                         # Add metrics
                         storage.add_metric(job.id, "wall_time_ms", result.wall_time_ms, "ms")
-                        if result.ttft_ms:
+                        if result.ttft_ms is not None:
                             storage.add_metric(job.id, "ttft_ms", result.ttft_ms, "ms")
-                        if result.token_count_output:
+                        if result.token_count_output is not None:
                             storage.add_metric(
                                 job.id,
                                 "output_tokens",

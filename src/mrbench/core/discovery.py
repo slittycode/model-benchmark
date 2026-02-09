@@ -82,6 +82,11 @@ CONFIG_LOCATIONS: dict[str, list[str]] = {
     "azure": [
         "~/.azure",
     ],
+    "llamacpp": [
+        "~/.cache/llama.cpp/models",
+        "~/.local/share/llama.cpp/models",
+        "~/models",
+    ],
 }
 
 # Auth check commands for various CLIs
@@ -101,11 +106,15 @@ AUTH_CHECK_COMMANDS: dict[str, list[str]] = {
 # Provider aliases (binary name -> canonical provider key).
 PROVIDER_ALIASES: dict[str, str] = {
     "az": "azure",
+    "llama-cli": "llamacpp",
+    "llama-server": "llamacpp",
+    "main": "llamacpp",
 }
 
 # Canonical provider key -> binary names to probe in PATH.
 PROVIDER_BINARIES: dict[str, list[str]] = {
     "azure": ["az"],
+    "llamacpp": ["llama-cli", "llama-server", "main"],
 }
 
 

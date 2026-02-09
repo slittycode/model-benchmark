@@ -8,7 +8,8 @@
 - 🔀 **Route** prompts to the best available backend based on constraints
 - 📊 **Benchmark** across multiple providers with detailed metrics
 - 📝 **Report** results in Markdown with comparisons
-- 🔒 **Privacy-first** — prompts not stored by default, secrets auto-redacted
+- 🔒 **Privacy-first** — prompts sent via stdin (not argv), not stored by default, secrets auto-redacted
+- 🔐 **Safe discovery defaults** — auth checks run only when explicitly requested
 
 ## Installation
 
@@ -31,6 +32,12 @@ mrbench doctor
 # Detect available providers
 mrbench detect
 
+# Discover tool/config status (no auth checks by default)
+mrbench discover
+
+# Include auth checks explicitly when needed
+mrbench discover --check-auth
+
 # Run a prompt
 echo "What is 2 + 2?" | mrbench run --provider ollama --model llama3.2
 
@@ -50,6 +57,7 @@ mrbench report <run_id>
 |---------|-------------|
 | `mrbench doctor` | Check prerequisites and show detected providers |
 | `mrbench detect` | Run discovery and record capability snapshot |
+| `mrbench discover` | Discover AI CLI tools/configs (`--check-auth` for auth probes) |
 | `mrbench providers` | List detected providers/adapters |
 | `mrbench models [provider]` | List available models for a provider |
 | `mrbench run` | Run a single prompt against a provider |

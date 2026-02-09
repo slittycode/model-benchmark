@@ -2,7 +2,16 @@
 
 from pathlib import Path
 
-from mrbench.core.benchmark import BenchmarkPrompt, BenchmarkSuite
+from mrbench.adapters.base import (
+    Adapter,
+    AdapterCapabilities,
+    DetectionResult,
+    RunOptions,
+    RunResult,
+)
+from mrbench.adapters.registry import AdapterRegistry
+from mrbench.core.benchmark import BenchmarkOrchestrator, BenchmarkPrompt, BenchmarkSuite
+from mrbench.core.storage import Storage
 
 
 def test_benchmark_prompt_creation():
@@ -46,3 +55,51 @@ prompts:
     suite = BenchmarkSuite.from_yaml(suite_file)
 
     assert suite.name == "mysuite"  # Uses filename
+
+
+class _ZeroMetricAdapter(Adapter):
+    @property
+    def name(self) -> str:
+        return "zero-metric"
+
+    def detect(self) -> DetectionResult:
+        return DetectionResult(detected=True)
+
+    def list_models(self) -> list[str]:
+        return ["zero-model"]
+
+    def run(self, prompt: str, options: RunOptions) -> RunResult:
+        return RunResult(
+            output="ok",
+            exit_code=0,
+            wall_time_ms=1.0,
+            ttft_ms=0.0,
+            token_count_input=0,
+            token_count_output=0,
+            tokens_estimated=True,
+        )
+
+    def get_capabilities(self) -> AdapterCapabilities:
+        return AdapterCapabilities(name=self.name, offline=True)
+
+
+def test_orchestrator_persists_zero_value_metrics(tmp_path: Path):
+    registry = AdapterRegistry()
+    registry.register(_ZeroMetricAdapter())
+    with Storage(tmp_path / "metrics.db") as storage:
+        orchestrator = BenchmarkOrchestrator(registry=registry, storage=storage)
+
+        suite = BenchmarkSuite(
+            name="zero-metric-suite",
+            description="",
+            prompts=[BenchmarkPrompt(id="p1", text="hello")],
+        )
+        run = orchestrator.run_suite(suite)
+
+        jobs = storage.get_jobs_for_run(run.run_id)
+        assert len(jobs) == 1
+        metrics = {m.metric_name: m.metric_value for m in storage.get_job_metrics(jobs[0].id)}
+
+        assert metrics["wall_time_ms"] == 1.0
+        assert metrics["ttft_ms"] == 0.0
+        assert metrics["output_tokens"] == 0.0

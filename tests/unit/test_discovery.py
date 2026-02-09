@@ -9,9 +9,7 @@ from mrbench.core.discovery import ConfigDetector
 from mrbench.core.executor import ExecutorResult
 
 
-def test_discover_cli_tools_skips_auth_checks_by_default(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_discover_cli_tools_skips_auth_checks_by_default(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "codex-config"
     config_dir.mkdir()
 
@@ -39,9 +37,7 @@ def test_discover_cli_tools_skips_auth_checks_by_default(
     assert results["ready"] == []
 
 
-def test_discover_cli_tools_runs_auth_checks_when_enabled(
-    monkeypatch, tmp_path: Path
-) -> None:
+def test_discover_cli_tools_runs_auth_checks_when_enabled(monkeypatch, tmp_path: Path) -> None:
     config_dir = tmp_path / "codex-config"
     config_dir.mkdir()
 
@@ -74,7 +70,9 @@ def test_check_provider_resolves_binary_alias_for_azure(monkeypatch, tmp_path: P
     config_dir.mkdir()
 
     monkeypatch.setattr(discovery_module, "CONFIG_LOCATIONS", {"azure": [str(config_dir)]})
-    monkeypatch.setattr(discovery_module, "AUTH_CHECK_COMMANDS", {"azure": ["az", "account", "show"]})
+    monkeypatch.setattr(
+        discovery_module, "AUTH_CHECK_COMMANDS", {"azure": ["az", "account", "show"]}
+    )
     monkeypatch.setattr(
         discovery_module.shutil,
         "which",
@@ -94,7 +92,9 @@ def test_discover_az_binary_uses_azure_config_and_auth(monkeypatch, tmp_path: Pa
     config_dir.mkdir()
 
     monkeypatch.setattr(discovery_module, "CONFIG_LOCATIONS", {"azure": [str(config_dir)]})
-    monkeypatch.setattr(discovery_module, "AUTH_CHECK_COMMANDS", {"azure": ["az", "account", "show"]})
+    monkeypatch.setattr(
+        discovery_module, "AUTH_CHECK_COMMANDS", {"azure": ["az", "account", "show"]}
+    )
     monkeypatch.setattr(
         discovery_module.shutil,
         "which",
@@ -117,3 +117,26 @@ def test_discover_az_binary_uses_azure_config_and_auth(monkeypatch, tmp_path: Pa
     assert results["installed"][0]["has_config"] is True
     assert results["installed"][0]["config_path"] == str(config_dir)
     assert calls == [["az", "account", "show"]]
+
+
+def test_discover_llamacpp_alias_uses_canonical_config(monkeypatch, tmp_path: Path) -> None:
+    model_dir = tmp_path / "llama-models"
+    model_dir.mkdir()
+
+    monkeypatch.setattr(discovery_module, "CONFIG_LOCATIONS", {"llamacpp": [str(model_dir)]})
+    monkeypatch.setattr(discovery_module, "AUTH_CHECK_COMMANDS", {})
+    monkeypatch.setattr(discovery_module, "PROVIDER_ALIASES", {"llama-cli": "llamacpp"})
+    monkeypatch.setattr(discovery_module, "PROVIDER_BINARIES", {"llamacpp": ["llama-cli"]})
+    monkeypatch.setattr(
+        discovery_module.shutil,
+        "which",
+        lambda tool: "/bin/llama-cli" if tool == "llama-cli" else None,
+    )
+
+    detector = ConfigDetector()
+    results = detector.discover_cli_tools()
+
+    assert len(results["installed"]) == 1
+    assert results["installed"][0]["name"] == "llama-cli"
+    assert results["installed"][0]["has_config"] is True
+    assert results["installed"][0]["config_path"] == str(model_dir)

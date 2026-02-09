@@ -2,10 +2,12 @@
 
 import json
 import re
+from pathlib import Path
 
 from typer.testing import CliRunner
 
-from mrbench.adapters.base import AdapterCapabilities, DetectionResult
+from mrbench.adapters.base import AdapterCapabilities, DetectionResult, RunResult
+from mrbench.cli import bench as bench_module
 from mrbench.cli import detect as detect_module
 from mrbench.cli import discover as discover_module
 from mrbench.cli import report as report_module
@@ -166,6 +168,143 @@ class TestDetectCommand:
         payload = json.loads(cache_file.read_text())
         assert len(payload["providers"]) == 1
         assert payload["providers"][0]["display_name"] == "Fake Provider"
+
+
+class TestBenchCommand:
+    """Tests for mrbench bench."""
+
+    class _FakeAdapter:
+        name = "fake-provider"
+        display_name = "Fake Provider"
+
+        def is_available(self) -> bool:
+            return True
+
+        def list_models(self) -> list[str]:
+            return ["fake-model"]
+
+        def get_capabilities(self) -> AdapterCapabilities:
+            return AdapterCapabilities(name=self.name, streaming=False, tool_calling=False)
+
+        def run(self, prompt: str, options: object) -> RunResult:
+            _ = options
+            return RunResult(
+                output=f"response:{prompt}",
+                exit_code=0,
+                wall_time_ms=12.5,
+                ttft_ms=0.0,
+                token_count_output=len(prompt),
+            )
+
+    class _FakeRegistry:
+        def __init__(self, adapter: object) -> None:
+            self._adapter = adapter
+
+        def get(self, provider: str):
+            if provider == "fake-provider":
+                return self._adapter
+            return None
+
+        def get_available(self):
+            return [self._adapter]
+
+    def _write_suite(self, tmp_path: Path) -> Path:
+        suite_path = tmp_path / "suite.yaml"
+        suite_path.write_text(
+            """
+name: Demo Suite
+prompts:
+  - id: p1
+    text: hello
+  - id: p2
+    text: world
+""".strip()
+        )
+        return suite_path
+
+    def test_bench_json_writes_run_artifacts(self, monkeypatch, tmp_path):
+        suite_path = self._write_suite(tmp_path)
+        out_dir = tmp_path / "out"
+        db_path = tmp_path / "bench.db"
+
+        registry = self._FakeRegistry(self._FakeAdapter())
+        monkeypatch.setattr(bench_module, "get_default_registry", lambda: registry)
+        monkeypatch.setattr(bench_module, "Storage", lambda: Storage(db_path))
+
+        result = runner.invoke(
+            app,
+            [
+                "bench",
+                "--suite",
+                str(suite_path),
+                "--provider",
+                "fake-provider",
+                "--output-dir",
+                str(out_dir),
+                "--store-prompts",
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0
+
+        clean_stdout = re.sub(r"[^\x20-\x7E\n\t]", "", _strip_ansi(result.stdout))
+        run_match = re.search(r'"run_id"\s*:\s*"([^"]+)"', clean_stdout)
+        output_match = re.search(r'"output_dir"\s*:\s*"([^"]+)"', clean_stdout)
+        assert run_match is not None
+        assert output_match is not None
+
+        run_id = run_match.group(1)
+        run_dir = out_dir / run_id
+        output_dir_value = output_match.group(1).replace("\n", "")
+        assert output_dir_value == str(run_dir)
+        assert run_dir.exists()
+
+        run_meta = json.loads((run_dir / "run_meta.json").read_text())
+        assert len(run_meta["jobs"]) == 2
+
+        first_job_id = run_meta["jobs"][0]["job_id"]
+        assert (run_dir / "jobs" / f"{first_job_id}.json").exists()
+        assert (run_dir / "jobs" / f"{first_job_id}.output.txt").exists()
+        assert (run_dir / "jobs" / f"{first_job_id}.prompt.txt").exists()
+
+        with Storage(db_path) as storage:
+            run = storage.get_run(run_id)
+            assert run is not None
+            assert run.status == "completed"
+            jobs = storage.get_jobs_for_run(run_id)
+            assert len(jobs) == 2
+
+    def test_bench_fails_for_missing_suite(self, tmp_path):
+        missing_suite = tmp_path / "does-not-exist.yaml"
+        result = runner.invoke(app, ["bench", "--suite", str(missing_suite)])
+        assert result.exit_code == 1
+        assert "Suite file not found" in _strip_ansi(result.stdout)
+
+    def test_bench_fails_when_provider_unavailable(self, monkeypatch, tmp_path):
+        suite_path = self._write_suite(tmp_path)
+
+        class _UnavailableRegistry:
+            def get(self, provider: str):
+                _ = provider
+                return None
+
+            def get_available(self):
+                return []
+
+        monkeypatch.setattr(bench_module, "get_default_registry", lambda: _UnavailableRegistry())
+
+        result = runner.invoke(
+            app,
+            [
+                "bench",
+                "--suite",
+                str(suite_path),
+                "--provider",
+                "fake-provider",
+            ],
+        )
+        assert result.exit_code == 1
+        assert "Provider not available" in _strip_ansi(result.stdout)
 
 
 class TestHelpMessages:

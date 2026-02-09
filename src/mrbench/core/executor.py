@@ -92,7 +92,7 @@ class SubprocessExecutor:
 
             if stream_callback:
                 # Streaming mode: read line by line
-                ttft_ms = self._stream_output(
+                ttft_ms, timed_out = self._stream_output(
                     process,
                     stdin,
                     stdout_data,
@@ -151,16 +151,17 @@ class SubprocessExecutor:
         chunks: list[str],
         callback: Callable[[str], None],
         start_time: float,
-    ) -> float | None:
+    ) -> tuple[float | None, bool]:
         """Stream output from process, collecting chunks and timing.
 
         Returns:
-            Time to first token in ms, or None if no output.
+            Tuple of (time to first token in ms, timed_out flag).
         """
         import os
         import selectors
 
         ttft_ms: float | None = None
+        timed_out = False
 
         # Send stdin if provided
         if stdin and process.stdin:
@@ -181,6 +182,7 @@ class SubprocessExecutor:
                 remaining = deadline - time.perf_counter()
                 if remaining <= 0:
                     # Timeout
+                    timed_out = True
                     try:
                         os.killpg(process.pid, signal.SIGKILL)
                     except (ProcessLookupError, PermissionError):
@@ -225,7 +227,7 @@ class SubprocessExecutor:
             sel.close()
 
         process.wait()
-        return ttft_ms
+        return ttft_ms, timed_out
 
     def run_with_stdin_prompt(
         self,

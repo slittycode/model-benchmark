@@ -98,6 +98,16 @@ AUTH_CHECK_COMMANDS: dict[str, list[str]] = {
     "gh": ["gh", "auth", "status"],  # GitHub CLI auth status
 }
 
+# Provider aliases (binary name -> canonical provider key).
+PROVIDER_ALIASES: dict[str, str] = {
+    "az": "azure",
+}
+
+# Canonical provider key -> binary names to probe in PATH.
+PROVIDER_BINARIES: dict[str, list[str]] = {
+    "azure": ["az"],
+}
+
 
 class ConfigDetector:
     """Detects AI CLI configurations across the system."""
@@ -105,6 +115,20 @@ class ConfigDetector:
     def __init__(self, timeout: float = 10.0) -> None:
         self._executor = SubprocessExecutor(timeout=timeout)
         self._home = Path.home()
+
+    def _canonical_provider(self, provider: str) -> str:
+        """Map aliases (binary names) to canonical provider keys."""
+        return PROVIDER_ALIASES.get(provider, provider)
+
+    def _resolve_binary(self, provider: str) -> str | None:
+        """Resolve provider binary path with explicit alias-aware mappings."""
+        canonical_provider = self._canonical_provider(provider)
+        binary_names = PROVIDER_BINARIES.get(canonical_provider, [provider])
+        for binary_name in binary_names:
+            binary = shutil.which(binary_name)
+            if binary:
+                return binary
+        return None
 
     def check_provider(self, provider: str) -> ConfigCheckResult:
         """Check configuration for a specific provider.
@@ -116,13 +140,14 @@ class ConfigDetector:
             ConfigCheckResult with detection details.
         """
         result = ConfigCheckResult(provider=provider)
+        canonical_provider = self._canonical_provider(provider)
 
         # Check binary
-        binary = shutil.which(provider)
+        binary = self._resolve_binary(provider)
         result.has_binary = binary is not None
 
         # Check config locations
-        config_paths = CONFIG_LOCATIONS.get(provider, [])
+        config_paths = CONFIG_LOCATIONS.get(canonical_provider, [])
         for config_path in config_paths:
             expanded = Path(os.path.expanduser(config_path))
             if expanded.exists():
@@ -131,7 +156,7 @@ class ConfigDetector:
                 break
 
         # Run auth check command if available
-        auth_cmd = AUTH_CHECK_COMMANDS.get(provider)
+        auth_cmd = AUTH_CHECK_COMMANDS.get(canonical_provider)
         if auth_cmd and result.has_binary:
             try:
                 exec_result = self._executor.run(auth_cmd)
@@ -218,6 +243,7 @@ class ConfigDetector:
         for tool in cli_tools:
             binary = shutil.which(tool)
             if binary:
+                canonical_provider = self._canonical_provider(tool)
                 info = {
                     "name": tool,
                     "path": binary,
@@ -226,7 +252,7 @@ class ConfigDetector:
                 }
 
                 # Check for config
-                config_paths = CONFIG_LOCATIONS.get(tool, [])
+                config_paths = CONFIG_LOCATIONS.get(canonical_provider, [])
                 for config_path in config_paths:
                     expanded = Path(os.path.expanduser(config_path))
                     if expanded.exists():
@@ -240,7 +266,7 @@ class ConfigDetector:
 
                 if check_auth:
                     # Run auth checks only when explicitly requested.
-                    auth_cmd = AUTH_CHECK_COMMANDS.get(tool)
+                    auth_cmd = AUTH_CHECK_COMMANDS.get(canonical_provider)
                     if auth_cmd:
                         try:
                             result = self._executor.run(auth_cmd)

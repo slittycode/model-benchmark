@@ -677,6 +677,58 @@ class TestDetectCommand:
         def list_all(self):
             return [TestDetectCommand._FakeAdapter()]
 
+    def test_detect_summary_skips_undetected_and_prints_no_model_list(self, monkeypatch):
+        class _UndetectedAdapter:
+            name = "missing-provider"
+            display_name = "Missing Provider"
+
+            def detect(self) -> DetectionResult:
+                return DetectionResult(detected=False)
+
+            def list_models(self) -> list[str]:
+                return ["should-not-appear"]
+
+            def get_capabilities(self) -> AdapterCapabilities:
+                return AdapterCapabilities(name=self.name)
+
+        class _DetectedNoModelsAdapter:
+            name = "detected-provider"
+            display_name = "Detected Provider"
+
+            def detect(self) -> DetectionResult:
+                return DetectionResult(
+                    detected=True,
+                    binary_path="/bin/detected-provider",
+                    version="1.0.0",
+                    auth_status="authenticated",
+                    trusted=True,
+                )
+
+            def list_models(self) -> list[str]:
+                return []
+
+            def get_capabilities(self) -> AdapterCapabilities:
+                return AdapterCapabilities(
+                    name=self.name,
+                    streaming=False,
+                    tool_calling=False,
+                    offline=True,
+                )
+
+        class _Registry:
+            def list_all(self):
+                return [_UndetectedAdapter(), _DetectedNoModelsAdapter()]
+
+        monkeypatch.setattr(detect_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(app, ["detect"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.stdout)
+        assert "Detected 1 providers" in output
+        assert "Detected Provider" in output
+        assert "no model list" in output
+        assert "Missing Provider" not in output
+
     def test_detect_json_handles_model_listing_failures(self, monkeypatch):
         monkeypatch.setattr(detect_module, "get_default_registry", lambda: self._FakeRegistry())
 

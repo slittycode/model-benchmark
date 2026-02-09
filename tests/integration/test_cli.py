@@ -3,6 +3,8 @@
 import json
 import re
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 from typer.testing import CliRunner
 
@@ -11,6 +13,8 @@ from mrbench.cli import bench as bench_module
 from mrbench.cli import detect as detect_module
 from mrbench.cli import discover as discover_module
 from mrbench.cli import report as report_module
+from mrbench.cli import route as route_module
+from mrbench.cli import run as run_module
 from mrbench.cli.main import app
 from mrbench.core.storage import Storage
 
@@ -20,6 +24,20 @@ runner = CliRunner()
 def _strip_ansi(text: str) -> str:
     """Remove ANSI escape sequences for stable help-text assertions."""
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
+def _parse_json_output(text: str) -> dict[str, Any]:
+    """Parse CLI JSON output robustly when terminal wrapping inserts control chars/newlines."""
+    clean_text = re.sub(r"[^\x09\x0A\x0D\x20-\x7E]", "", _strip_ansi(text)).replace("\r", "")
+    start_idx = clean_text.find("{")
+    end_idx = clean_text.rfind("}")
+    assert start_idx != -1
+    assert end_idx != -1
+    blob = clean_text[start_idx : end_idx + 1]
+    try:
+        return json.loads(blob)
+    except json.JSONDecodeError:
+        return json.loads(blob.replace("\n", ""))
 
 
 class TestDoctorCommand:
@@ -66,6 +84,90 @@ class TestRunCommand:
         assert result.exit_code == 0
         assert "Fake response" in result.stdout
 
+    def test_run_unknown_provider_shows_available(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text("Hello")
+
+        class _FakeRegistry:
+            def get(self, provider: str):
+                _ = provider
+                return None
+
+            def list_names(self) -> list[str]:
+                return ["fake", "codex"]
+
+        monkeypatch.setattr(run_module, "get_default_registry", lambda: _FakeRegistry())
+
+        result = runner.invoke(
+            app, ["run", "-p", "missing", "-m", "fake-fast", "--prompt", str(prompt_file)]
+        )
+        assert result.exit_code == 1
+        output = _strip_ansi(result.stdout)
+        assert "Unknown provider: missing" in output
+        assert "Available: fake, codex" in output
+
+    def test_run_provider_not_available(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text("Hello")
+
+        class _UnavailableAdapter:
+            def is_available(self) -> bool:
+                return False
+
+        class _FakeRegistry:
+            def get(self, provider: str):
+                _ = provider
+                return _UnavailableAdapter()
+
+            def list_names(self) -> list[str]:
+                return ["fake"]
+
+        monkeypatch.setattr(run_module, "get_default_registry", lambda: _FakeRegistry())
+
+        result = runner.invoke(
+            app, ["run", "-p", "fake", "-m", "fake-fast", "--prompt", str(prompt_file)]
+        )
+        assert result.exit_code == 1
+        assert "Provider 'fake' is not available" in _strip_ansi(result.stdout)
+
+    def test_run_empty_prompt_fails(self, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text(" \n")
+
+        result = runner.invoke(
+            app, ["run", "-p", "fake", "-m", "fake-fast", "--prompt", str(prompt_file)]
+        )
+        assert result.exit_code == 1
+        assert "Empty prompt" in _strip_ansi(result.stdout)
+
+    def test_run_handles_adapter_exception(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text("Hello")
+
+        class _BrokenAdapter:
+            def is_available(self) -> bool:
+                return True
+
+            def run(self, prompt: str, options: object):
+                _ = (prompt, options)
+                raise RuntimeError("boom")
+
+        class _FakeRegistry:
+            def get(self, provider: str):
+                _ = provider
+                return _BrokenAdapter()
+
+            def list_names(self) -> list[str]:
+                return ["fake"]
+
+        monkeypatch.setattr(run_module, "get_default_registry", lambda: _FakeRegistry())
+
+        result = runner.invoke(
+            app, ["run", "-p", "fake", "-m", "fake-fast", "--prompt", str(prompt_file)]
+        )
+        assert result.exit_code == 1
+        assert "Error running prompt: boom" in _strip_ansi(result.stdout)
+
 
 class TestRouteCommand:
     """Tests for mrbench route."""
@@ -76,6 +178,106 @@ class TestRouteCommand:
 
         result = runner.invoke(app, ["route", "--prompt", str(prompt_file)])
         assert result.exit_code == 0
+
+    def test_route_missing_prompt_file_fails(self, tmp_path):
+        missing = tmp_path / "missing.txt"
+        result = runner.invoke(app, ["route", "--prompt", str(missing)])
+        assert result.exit_code == 1
+        assert "Prompt file not found" in _strip_ansi(result.stdout)
+
+    def test_route_fails_when_no_providers_available(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text("Test prompt")
+
+        class _EmptyRegistry:
+            def get_available(self):
+                return []
+
+        monkeypatch.setattr(route_module, "get_default_registry", lambda: _EmptyRegistry())
+        monkeypatch.setattr(
+            route_module,
+            "load_config",
+            lambda: SimpleNamespace(routing=SimpleNamespace(preference_order=[]), providers={}),
+        )
+
+        result = runner.invoke(app, ["route", "--prompt", str(prompt_file)])
+        assert result.exit_code == 1
+        assert "No providers available" in _strip_ansi(result.stdout)
+
+    def test_route_fails_when_constraints_filter_all_candidates(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text("Test prompt")
+
+        class _Adapter:
+            name = "fake"
+
+            def get_capabilities(self) -> AdapterCapabilities:
+                return AdapterCapabilities(name=self.name, offline=False, streaming=False)
+
+        class _Registry:
+            def get_available(self):
+                return [_Adapter()]
+
+        monkeypatch.setattr(route_module, "get_default_registry", lambda: _Registry())
+        monkeypatch.setattr(
+            route_module,
+            "load_config",
+            lambda: SimpleNamespace(
+                routing=SimpleNamespace(preference_order=["fake"]),
+                providers={},
+            ),
+        )
+
+        result = runner.invoke(app, ["route", "--prompt", str(prompt_file), "--offline-only"])
+        assert result.exit_code == 1
+        assert "No providers match the constraints" in _strip_ansi(result.stdout)
+
+    def test_route_json_explain_uses_config_default_model(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text("Test prompt")
+
+        class _Adapter:
+            name = "fake"
+
+            def get_capabilities(self) -> AdapterCapabilities:
+                return AdapterCapabilities(name=self.name, offline=True, streaming=True)
+
+            def list_models(self) -> list[str]:
+                return ["fallback-model"]
+
+        class _Registry:
+            def get_available(self):
+                return [_Adapter()]
+
+        monkeypatch.setattr(route_module, "get_default_registry", lambda: _Registry())
+        monkeypatch.setattr(
+            route_module,
+            "load_config",
+            lambda: SimpleNamespace(
+                routing=SimpleNamespace(preference_order=["fake"]),
+                providers={"fake": SimpleNamespace(default_model="cfg-model")},
+            ),
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "route",
+                "--prompt",
+                str(prompt_file),
+                "--json",
+                "--explain",
+                "--offline-only",
+                "--streaming-required",
+            ],
+        )
+        assert result.exit_code == 0
+        payload = _parse_json_output(result.stdout)
+        assert payload["provider"] == "fake"
+        assert payload["model"] == "cfg-model"
+        assert payload["offline"] is True
+        assert payload["streaming"] is True
+        assert any("preference order" in reason for reason in payload["explanation"])
 
 
 class TestDiscoverCommand:
@@ -110,6 +312,87 @@ class TestDiscoverCommand:
 
         payload = json.loads(_strip_ansi(result.stdout))
         assert payload["installed"][0]["name"] == "codex"
+
+    def test_discover_rich_all_and_auth_statuses(self, monkeypatch):
+        class _FakeDetector:
+            def discover_cli_tools(self, check_auth: bool = False):
+                assert check_auth is True
+                return {
+                    "installed": [
+                        {
+                            "name": "codex",
+                            "path": "/bin/codex",
+                            "has_config": True,
+                            "config_path": "/tmp/codex-config",
+                            "auth_status": "authenticated",
+                        },
+                        {
+                            "name": "goose",
+                            "path": "/bin/goose",
+                            "has_config": False,
+                            "config_path": None,
+                            "auth_status": "not_authenticated",
+                        },
+                        {
+                            "name": "opencode",
+                            "path": "/bin/opencode",
+                            "has_config": False,
+                            "config_path": None,
+                            "auth_status": "error",
+                            "auth_error": "login failed",
+                        },
+                        {
+                            "name": "gemini",
+                            "path": "/bin/gemini",
+                            "has_config": False,
+                            "config_path": None,
+                        },
+                    ],
+                    "configured": [{"name": "codex"}],
+                    "ready": [{"name": "codex"}],
+                    "not_found": ["claude", "ollama"],
+                }
+
+        monkeypatch.setattr(discover_module, "ConfigDetector", lambda: _FakeDetector())
+
+        result = runner.invoke(app, ["discover", "--all", "--check-auth"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.stdout)
+        assert "AI CLI Tool Discovery" in output
+        assert "Not installed:" in output
+        assert "claude" in output
+        assert "ollama" in output
+        assert "Auth Check Results:" in output
+        assert "codex: authenticated" in output
+        assert "goose: not authenticated" in output
+        assert "opencode: login failed" in output
+        assert "gemini: not checked" in output
+
+    def test_discover_does_not_print_auth_section_without_check_auth(self, monkeypatch):
+        class _FakeDetector:
+            def discover_cli_tools(self, check_auth: bool = False):
+                assert check_auth is False
+                return {
+                    "installed": [
+                        {
+                            "name": "codex",
+                            "path": "/bin/codex",
+                            "has_config": False,
+                            "config_path": None,
+                        }
+                    ],
+                    "configured": [],
+                    "ready": [],
+                    "not_found": [],
+                }
+
+        monkeypatch.setattr(discover_module, "ConfigDetector", lambda: _FakeDetector())
+
+        result = runner.invoke(app, ["discover"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.stdout)
+        assert "AI CLI Tool Discovery" in output
+        assert "Auth Check Results:" not in output
 
 
 class TestDetectCommand:
@@ -151,7 +434,7 @@ class TestDetectCommand:
         result = runner.invoke(app, ["detect", "--json"])
         assert result.exit_code == 0
 
-        payload = json.loads(_strip_ansi(result.stdout))
+        payload = _parse_json_output(result.stdout)
         assert len(payload["providers"]) == 1
         assert payload["providers"][0]["name"] == "fake-provider"
         assert payload["providers"][0]["models"] == []
@@ -247,16 +530,10 @@ prompts:
         )
         assert result.exit_code == 0
 
-        clean_stdout = re.sub(r"[^\x20-\x7E\n\t]", "", _strip_ansi(result.stdout))
-        run_match = re.search(r'"run_id"\s*:\s*"([^"]+)"', clean_stdout)
-        output_match = re.search(r'"output_dir"\s*:\s*"([^"]+)"', clean_stdout)
-        assert run_match is not None
-        assert output_match is not None
-
-        run_id = run_match.group(1)
+        payload = _parse_json_output(result.stdout)
+        run_id = payload["run_id"]
         run_dir = out_dir / run_id
-        output_dir_value = output_match.group(1).replace("\n", "")
-        assert output_dir_value == str(run_dir)
+        assert payload["output_dir"] == str(run_dir)
         assert run_dir.exists()
 
         run_meta = json.loads((run_dir / "run_meta.json").read_text())
@@ -346,5 +623,5 @@ class TestReportCommand:
         result = runner.invoke(app, ["report", run.id, "--format", "json"])
         assert result.exit_code == 0
 
-        payload = json.loads(_strip_ansi(result.stdout))
+        payload = _parse_json_output(result.stdout)
         assert payload["providers"]["fake"]["avg_ttft_ms"] == 0.0

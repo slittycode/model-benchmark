@@ -12,6 +12,7 @@ from mrbench.adapters.base import AdapterCapabilities, DetectionResult, RunResul
 from mrbench.cli import bench as bench_module
 from mrbench.cli import detect as detect_module
 from mrbench.cli import discover as discover_module
+from mrbench.cli import models as models_module
 from mrbench.cli import report as report_module
 from mrbench.cli import route as route_module
 from mrbench.cli import run as run_module
@@ -69,6 +70,111 @@ class TestModelsCommand:
         result = runner.invoke(app, ["models", "fake"])
         assert result.exit_code == 0
         assert "fake-fast" in result.stdout
+
+    def test_models_unknown_provider_fails(self, monkeypatch):
+        class _Registry:
+            def get(self, provider: str):
+                _ = provider
+                return None
+
+            def get_available(self):
+                return []
+
+        monkeypatch.setattr(models_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(app, ["models", "missing"])
+        assert result.exit_code == 1
+        assert "Unknown provider: missing" in _strip_ansi(result.stdout)
+
+    def test_models_provider_not_available_fails(self, monkeypatch):
+        class _Adapter:
+            def is_available(self) -> bool:
+                return False
+
+        class _Registry:
+            def get(self, provider: str):
+                _ = provider
+                return _Adapter()
+
+            def get_available(self):
+                return []
+
+        monkeypatch.setattr(models_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(app, ["models", "fake"])
+        assert result.exit_code == 1
+        assert "Provider 'fake' is not available" in _strip_ansi(result.stdout)
+
+    def test_models_provider_list_error_fails(self, monkeypatch):
+        class _Adapter:
+            def is_available(self) -> bool:
+                return True
+
+            def list_models(self):
+                raise RuntimeError("list failure")
+
+        class _Registry:
+            def get(self, provider: str):
+                _ = provider
+                return _Adapter()
+
+            def get_available(self):
+                return []
+
+        monkeypatch.setattr(models_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(app, ["models", "fake"])
+        assert result.exit_code == 1
+        assert "Error listing models: list failure" in _strip_ansi(result.stdout)
+
+    def test_models_all_json_lists_only_non_empty_models(self, monkeypatch):
+        class _AdapterWithModels:
+            name = "a"
+
+            def list_models(self) -> list[str]:
+                return ["m1", "m2"]
+
+        class _AdapterNoModels:
+            name = "b"
+
+            def list_models(self) -> list[str]:
+                return []
+
+        class _Registry:
+            def get_available(self):
+                return [_AdapterWithModels(), _AdapterNoModels()]
+
+            def get(self, provider: str):
+                _ = provider
+                return None
+
+        monkeypatch.setattr(models_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(app, ["models", "--json"])
+        assert result.exit_code == 0
+        payload = _parse_json_output(result.stdout)
+        assert payload == {"a": ["m1", "m2"]}
+
+    def test_models_all_no_models_prints_guidance(self, monkeypatch):
+        class _Adapter:
+            name = "a"
+
+            def list_models(self) -> list[str]:
+                return []
+
+        class _Registry:
+            def get_available(self):
+                return [_Adapter()]
+
+            def get(self, provider: str):
+                _ = provider
+                return None
+
+        monkeypatch.setattr(models_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(app, ["models"])
+        assert result.exit_code == 0
+        assert "No models found. Ensure providers are running." in _strip_ansi(result.stdout)
 
 
 class TestRunCommand:
@@ -167,6 +273,43 @@ class TestRunCommand:
         )
         assert result.exit_code == 1
         assert "Error running prompt: boom" in _strip_ansi(result.stdout)
+
+    def test_run_json_nonzero_exit_redacts_error(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text("Hello")
+
+        class _Adapter:
+            def is_available(self) -> bool:
+                return True
+
+            def run(self, prompt: str, options: object) -> RunResult:
+                _ = (prompt, options)
+                return RunResult(
+                    output="failure output",
+                    exit_code=7,
+                    wall_time_ms=3.5,
+                    error="upstream auth failed with key sk-abcdefghijklmnopqrstuv",
+                )
+
+        class _Registry:
+            def get(self, provider: str):
+                _ = provider
+                return _Adapter()
+
+            def list_names(self) -> list[str]:
+                return ["fake"]
+
+        monkeypatch.setattr(run_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(
+            app, ["run", "-p", "fake", "-m", "fake-fast", "--prompt", str(prompt_file), "--json"]
+        )
+        assert result.exit_code == 7
+        payload = _parse_json_output(result.stdout)
+        assert payload["exit_code"] == 7
+        assert payload["error"] is not None
+        assert "sk-abcdefghijklmnopqrstuv" not in payload["error"]
+        assert "[REDACTED]" in payload["error"]
 
 
 class TestRouteCommand:

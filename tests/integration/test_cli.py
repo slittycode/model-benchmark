@@ -27,18 +27,32 @@ def _strip_ansi(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
-def _parse_json_output(text: str) -> dict[str, Any]:
+def _parse_json_output(text: str) -> Any:
     """Parse CLI JSON output robustly when terminal wrapping inserts control chars/newlines."""
     clean_text = re.sub(r"[^\x09\x0A\x0D\x20-\x7E]", "", _strip_ansi(text)).replace("\r", "")
-    start_idx = clean_text.find("{")
-    end_idx = clean_text.rfind("}")
-    assert start_idx != -1
-    assert end_idx != -1
-    blob = clean_text[start_idx : end_idx + 1]
-    try:
-        return json.loads(blob)
-    except json.JSONDecodeError:
-        return json.loads(blob.replace("\n", ""))
+
+    # Fast path: output is only JSON.
+    stripped = clean_text.strip()
+    for candidate in (stripped, stripped.replace("\n", "")):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+
+    # Fallback: extract first object/array blob from wrapped output.
+    for open_char, close_char in (("{", "}"), ("[", "]")):
+        start_idx = clean_text.find(open_char)
+        end_idx = clean_text.rfind(close_char)
+        if start_idx == -1 or end_idx == -1:
+            continue
+        blob = clean_text[start_idx : end_idx + 1]
+        for candidate in (blob, blob.replace("\n", "")):
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+
+    raise AssertionError("Failed to parse JSON output")
 
 
 class TestDoctorCommand:
@@ -175,6 +189,98 @@ class TestModelsCommand:
         result = runner.invoke(app, ["models"])
         assert result.exit_code == 0
         assert "No models found. Ensure providers are running." in _strip_ansi(result.stdout)
+
+    def test_models_all_handles_adapter_list_exception(self, monkeypatch):
+        class _AdapterBroken:
+            name = "broken"
+
+            def list_models(self) -> list[str]:
+                raise RuntimeError("adapter failure")
+
+        class _Registry:
+            def get_available(self):
+                return [_AdapterBroken()]
+
+            def get(self, provider: str):
+                _ = provider
+                return None
+
+        monkeypatch.setattr(models_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(app, ["models"])
+        assert result.exit_code == 0
+        assert "No models found. Ensure providers are running." in _strip_ansi(result.stdout)
+
+    def test_models_all_prints_non_json_grouped_output(self, monkeypatch):
+        class _Adapter:
+            name = "provider-a"
+
+            def list_models(self) -> list[str]:
+                return ["m1", "m2"]
+
+        class _Registry:
+            def get_available(self):
+                return [_Adapter()]
+
+            def get(self, provider: str):
+                _ = provider
+                return None
+
+        monkeypatch.setattr(models_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(app, ["models"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.stdout)
+        assert "provider-a" in output
+        assert "m1" in output
+        assert "m2" in output
+
+    def test_models_specific_json_output(self, monkeypatch):
+        class _Adapter:
+            def is_available(self) -> bool:
+                return True
+
+            def list_models(self) -> list[str]:
+                return ["x", "y"]
+
+        class _Registry:
+            def get(self, provider: str):
+                _ = provider
+                return _Adapter()
+
+            def get_available(self):
+                return []
+
+        monkeypatch.setattr(models_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(app, ["models", "fake", "--json"])
+        assert result.exit_code == 0
+        payload = _parse_json_output(result.stdout)
+        assert payload == ["x", "y"]
+
+    def test_models_specific_no_models_prints_guidance(self, monkeypatch):
+        class _Adapter:
+            def is_available(self) -> bool:
+                return True
+
+            def list_models(self) -> list[str]:
+                return []
+
+        class _Registry:
+            def get(self, provider: str):
+                _ = provider
+                return _Adapter()
+
+            def get_available(self):
+                return []
+
+        monkeypatch.setattr(models_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(app, ["models", "fake"])
+        assert result.exit_code == 0
+        output = _strip_ansi(result.stdout)
+        assert "No models available for fake." in output
+        assert "specify a model ID manually" in output
 
 
 class TestRunCommand:

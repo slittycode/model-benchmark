@@ -7,7 +7,10 @@ import pytest
 from mrbench.core.config import (
     DEFAULT_CONFIG,
     GeneralConfig,
+    get_default_config_path,
+    get_default_data_path,
     load_config,
+    merge_config,
 )
 
 
@@ -44,3 +47,37 @@ def test_routing_preference_order():
     config = DEFAULT_CONFIG
     assert "ollama" in config.routing.preference_order
     assert "claude" in config.routing.preference_order
+
+
+def test_default_path_helpers():
+    config_path = get_default_config_path()
+    data_path = get_default_data_path()
+
+    assert str(config_path).endswith("/.config/mrbench/config.toml")
+    assert str(data_path).endswith("/.local/share/mrbench")
+
+
+def test_load_config_invalid_toml_warns_and_uses_defaults(tmp_path: Path):
+    config_file = tmp_path / "invalid.toml"
+    config_file.write_text("[general\ninvalid = true")
+
+    with pytest.warns(UserWarning, match="Failed to load config"):
+        config = load_config(config_file)
+
+    assert config.general.timeout == DEFAULT_CONFIG.general.timeout
+
+
+def test_merge_config_deep_merge():
+    merged = merge_config(
+        DEFAULT_CONFIG,
+        {
+            "general": {"timeout": 120, "store_prompts": True},
+            "providers": {"ollama": {"default_model": "llama3.2", "enabled": True}},
+            "logging": {"level": "DEBUG"},
+        },
+    )
+
+    assert merged.general.timeout == 120
+    assert merged.general.store_prompts is True
+    assert merged.logging.level == "DEBUG"
+    assert merged.providers["ollama"].default_model == "llama3.2"

@@ -67,18 +67,18 @@ class VllmAdapter(Adapter):
         if not binary:
             return RunResult(output="", exit_code=127, wall_time_ms=0, error="vllm not found")
 
-        # vllm complete --quick "prompt" --model model_id
+        # Keep prompt out of argv to avoid process-list exposure.
         args = [
             binary,
             "complete",
             "--quick",
-            prompt,
+            "-",
         ]
 
         if options.model:
             args.extend(["--model", options.model])
 
-        result = self._executor.run(args)
+        result = self._executor.run_with_stdin_prompt(args, prompt)
 
         return RunResult(
             output=result.stdout,

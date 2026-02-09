@@ -168,10 +168,13 @@ class ConfigDetector:
                 results.append(result)
         return results
 
-    def discover_cli_tools(self) -> dict[str, Any]:
+    def discover_cli_tools(self, check_auth: bool = False) -> dict[str, Any]:
         """Discover all AI/coding CLI tools on the system.
 
         Searches for common AI CLI tools and checks their status.
+
+        Args:
+            check_auth: When True, run auth check commands for installed tools.
 
         Returns:
             Dictionary with discovery results.
@@ -235,15 +238,20 @@ class ConfigDetector:
                 if info["has_config"]:
                     discovered["configured"].append(info)
 
-                    # Run quick check if we have an auth command
+                if check_auth:
+                    # Run auth checks only when explicitly requested.
                     auth_cmd = AUTH_CHECK_COMMANDS.get(tool)
                     if auth_cmd:
                         try:
                             result = self._executor.run(auth_cmd)
+                            info["auth_status"] = (
+                                "authenticated" if result.exit_code == 0 else "not_authenticated"
+                            )
                             if result.exit_code == 0:
                                 discovered["ready"].append(info)
-                        except Exception:
-                            pass  # Not ready
+                        except Exception as e:
+                            info["auth_status"] = "error"
+                            info["auth_error"] = str(e)
             else:
                 discovered["not_found"].append(tool)
 

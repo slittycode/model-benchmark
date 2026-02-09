@@ -62,10 +62,10 @@ class OpenCodeAdapter(Adapter):
         if not binary:
             return RunResult(output="", exit_code=127, wall_time_ms=0, error="opencode not found")
 
-        # opencode -p "prompt" --quiet
-        args = [binary, "-p", prompt, "--quiet"]
+        # Keep prompt out of argv to avoid process-list exposure.
+        args = [binary, "-p", "-", "--quiet"]
 
-        result = self._executor.run(args)
+        result = self._executor.run_with_stdin_prompt(args, prompt)
 
         return RunResult(
             output=result.stdout,

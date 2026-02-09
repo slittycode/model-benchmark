@@ -37,7 +37,7 @@ def discover_command(
     status, including config files and authentication.
     """
     detector = ConfigDetector()
-    results = detector.discover_cli_tools()
+    results = detector.discover_cli_tools(check_auth=check_auth)
 
     if json_output:
         console.print(json.dumps(results, indent=2))
@@ -100,22 +100,21 @@ def discover_command(
             console.print(f"  [dim]• {tool}[/dim]")
         console.print()
 
-    # Check auth for specific providers if requested
+    # Report auth checks only when explicitly requested.
     if check_auth and results["installed"]:
         console.print("[bold]Auth Check Results:[/bold]")
         console.print()
 
         for tool in results["installed"]:
-            result = detector.check_provider(tool["name"])
-            if result.has_binary:
-                if result.auth_status == "authenticated":
-                    console.print(f"  [green]✓[/green] {tool['name']}: authenticated")
-                elif result.auth_status == "not_authenticated":
-                    console.print(f"  [yellow]○[/yellow] {tool['name']}: not authenticated")
-                elif result.auth_status == "error":
-                    err = result.errors[0] if result.errors else "unknown error"
-                    console.print(f"  [red]✗[/red] {tool['name']}: {err}")
-                else:
-                    console.print(f"  [dim]?[/dim] {tool['name']}: {result.auth_status}")
+            auth_status = tool.get("auth_status")
+            if auth_status == "authenticated":
+                console.print(f"  [green]✓[/green] {tool['name']}: authenticated")
+            elif auth_status == "not_authenticated":
+                console.print(f"  [yellow]○[/yellow] {tool['name']}: not authenticated")
+            elif auth_status == "error":
+                err = tool.get("auth_error", "unknown error")
+                console.print(f"  [red]✗[/red] {tool['name']}: {err}")
+            else:
+                console.print(f"  [dim]?[/dim] {tool['name']}: not checked")
 
         console.print()

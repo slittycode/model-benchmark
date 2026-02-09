@@ -128,23 +128,22 @@ class OllamaAdapter(Adapter):
 
     def run(self, prompt: str, options: RunOptions) -> RunResult:
         """Run a prompt through Ollama."""
-        # Build command: ollama run <model> "<prompt>"
-        # For non-interactive use, we pass the prompt as an argument
-        args = ["run", options.model]
+        binary = self._get_binary()
+        if not binary:
+            return RunResult(output="", exit_code=127, wall_time_ms=0, error="ollama not found")
 
-        # Note: For very long prompts, consider using stdin instead
-        # For now, pass as argument (Ollama handles this well)
-        args.append(prompt)
+        # Keep prompt out of argv to avoid process-list exposure.
+        args = [binary, "run", options.model]
 
         # Execute
         if options.stream and options.stream_callback:
             result = self._executor.run(
-                [self._get_binary() or "ollama", *args[:-1]],
+                args,
                 stdin=prompt,
                 stream_callback=options.stream_callback,
             )
         else:
-            result = self._run_command(args)
+            result = self._executor.run_with_stdin_prompt(args, prompt)
 
         # Build result
         return RunResult(

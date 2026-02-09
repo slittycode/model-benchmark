@@ -63,10 +63,10 @@ class GooseAdapter(Adapter):
         if not binary:
             return RunResult(output="", exit_code=127, wall_time_ms=0, error="goose not found")
 
-        # goose run "prompt"
-        args = [binary, "run", prompt]
+        # Keep prompt out of argv to avoid process-list exposure.
+        args = [binary, "run", "-"]
 
-        result = self._executor.run(args)
+        result = self._executor.run_with_stdin_prompt(args, prompt)
 
         return RunResult(
             output=result.stdout,

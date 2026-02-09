@@ -62,10 +62,10 @@ class CodexAdapter(Adapter):
         if not binary:
             return RunResult(output="", exit_code=127, wall_time_ms=0, error="codex not found")
 
-        # codex exec "prompt" for non-interactive
-        args = [binary, "exec", prompt]
+        # Keep prompt out of argv to avoid process-list exposure.
+        args = [binary, "exec", "-"]
 
-        result = self._executor.run(args)
+        result = self._executor.run_with_stdin_prompt(args, prompt)
 
         return RunResult(
             output=result.stdout,

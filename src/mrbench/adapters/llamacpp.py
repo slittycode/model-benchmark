@@ -99,19 +99,19 @@ class LlamaCppAdapter(Adapter):
                 error=f"Model not found: {options.model}",
             )
 
-        # Build command: llama-cli -m model.gguf -p "prompt"
+        # Keep prompt out of argv to avoid process-list exposure.
         args = [
             binary,
             "-m",
             str(model_path),
             "-p",
-            prompt,
+            "-",
             "--no-display-prompt",  # Don't echo the prompt
             "-n",
             "512",  # Max tokens
         ]
 
-        result = self._executor.run(args)
+        result = self._executor.run_with_stdin_prompt(args, prompt)
 
         return RunResult(
             output=result.stdout,

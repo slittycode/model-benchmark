@@ -5,7 +5,6 @@ Runs a single prompt against a provider.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Annotated
@@ -15,6 +14,7 @@ from rich.console import Console
 
 from mrbench.adapters.base import RunOptions
 from mrbench.adapters.registry import get_default_registry
+from mrbench.cli._output import emit_json
 from mrbench.core.redaction import redact_secrets
 
 console = Console()
@@ -106,10 +106,13 @@ def run_command(
             "token_count_output": result.token_count_output,
             "tokens_estimated": result.tokens_estimated,
         }
-        console.print(json.dumps(output_data, indent=2))
-    elif not stream:
-        # Print output if not streaming (streaming already printed)
-        console.print(result.output)
+        emit_json(output_data)
+    else:
+        if not stream and result.output:
+            # Print output if not streaming (streaming already printed).
+            console.print(result.output)
+        if result.exit_code != 0 and result.error:
+            console.print(f"[red]{redact_secrets(result.error)}[/red]")
 
     if result.exit_code != 0:
         raise typer.Exit(result.exit_code)

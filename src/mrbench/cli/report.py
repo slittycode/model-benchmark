@@ -5,13 +5,13 @@ Generates summary report for a benchmark run.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Annotated, TypedDict
 
 import typer
 from rich.console import Console
 
+from mrbench.cli._output import emit_json
 from mrbench.core.storage import Storage
 
 console = Console()
@@ -121,7 +121,7 @@ def report_command(
             "completed_at": run.completed_at,
             "providers": stats,
         }
-        console.print(json.dumps(report_data, indent=2))
+        emit_json(report_data)
         return
 
     # Generate Markdown

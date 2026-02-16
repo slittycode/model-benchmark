@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING, Any, cast
 
 import yaml
 
+from mrbench.core.redaction import redact_for_storage
+
 if TYPE_CHECKING:
     from mrbench.adapters.base import Adapter
     from mrbench.adapters.registry import AdapterRegistry
@@ -111,6 +113,7 @@ class BenchmarkOrchestrator:
         providers: list[str] | None = None,
         models: dict[str, str] | None = None,
         on_progress: Callable[[str, str, int], None] | None = None,
+        store_prompts: bool = False,
     ) -> BenchmarkRun:
         """Run a benchmark suite.
 
@@ -119,6 +122,7 @@ class BenchmarkOrchestrator:
             providers: List of provider names to test. None = all available.
             models: Map of provider to model. None = use provider default.
             on_progress: Optional callback for progress updates.
+            store_prompts: Whether to persist a prompt preview in storage.
 
         Returns:
             BenchmarkRun with all results.
@@ -159,7 +163,9 @@ class BenchmarkOrchestrator:
                     provider=adapter.name,
                     model=model,
                     prompt_hash=hash_prompt(prompt.text),
-                    prompt_preview=prompt.text[:100] if prompt.text else None,
+                    prompt_preview=(
+                        redact_for_storage(prompt.text[:100]) if store_prompts and prompt.text else None
+                    ),
                 )
                 self._storage.start_job(job.id)
 

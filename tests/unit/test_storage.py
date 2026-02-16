@@ -70,6 +70,23 @@ def test_complete_run(storage: Storage):
     assert updated.completed_at is not None
 
 
+def test_complete_job_redacts_error_message(storage: Storage):
+    run = storage.create_run()
+    job = storage.create_job(run.id, "fake", "fake-fast", "hash")
+    storage.start_job(job.id)
+    storage.complete_job(
+        job.id,
+        exit_code=1,
+        error_message="upstream failed with key sk-abcdefghijklmnopqrstuv",
+    )
+
+    updated = storage.get_job(job.id)
+    assert updated is not None
+    assert updated.error_message is not None
+    assert "[REDACTED]" in updated.error_message
+    assert "sk-abcdefghijklmnopqrstuv" not in updated.error_message
+
+
 def test_storage_context_manager_closes_connection(tmp_path: Path):
     db_path = tmp_path / "ctx.db"
     with Storage(db_path) as managed:

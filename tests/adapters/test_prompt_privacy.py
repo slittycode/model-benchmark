@@ -27,6 +27,7 @@ class SpyExecutor:
     def __init__(self) -> None:
         self.last_args: list[str] = []
         self.stdin_value: str | None = None
+        self.last_timeout: float | None = None
 
     def run(
         self,
@@ -34,9 +35,11 @@ class SpyExecutor:
         stdin: str | None = None,
         cwd: str | None = None,
         stream_callback: object | None = None,
+        timeout: float | None = None,
     ) -> ExecutorResult:
         self.last_args = args
         self.stdin_value = stdin
+        self.last_timeout = timeout
         return ExecutorResult(stdout="ok", stderr="", exit_code=0, wall_time_ms=1.0)
 
     def run_with_stdin_prompt(
@@ -45,9 +48,11 @@ class SpyExecutor:
         prompt: str,
         cwd: str | None = None,
         stream_callback: object | None = None,
+        timeout: float | None = None,
     ) -> ExecutorResult:
         self.last_args = args
         self.stdin_value = prompt
+        self.last_timeout = timeout
         return ExecutorResult(stdout="ok", stderr="", exit_code=0, wall_time_ms=1.0)
 
 
@@ -68,11 +73,15 @@ def test_adapter_run_keeps_prompt_out_of_argv(adapter: object, model: str) -> No
     spy = SpyExecutor()
     adapter._executor = spy  # type: ignore[attr-defined]
 
-    result = adapter.run(prompt, RunOptions(model=model))  # type: ignore[attr-defined]
+    result = adapter.run(
+        prompt,
+        RunOptions(model=model, timeout=42.5),
+    )  # type: ignore[attr-defined]
 
     assert result.exit_code == 0
     assert all(prompt not in arg for arg in spy.last_args)
     assert spy.stdin_value == prompt
+    assert spy.last_timeout == 42.5
 
 
 def test_llamacpp_run_keeps_prompt_out_of_argv() -> None:
@@ -82,8 +91,9 @@ def test_llamacpp_run_keeps_prompt_out_of_argv() -> None:
     adapter._executor = spy
     adapter._find_model = lambda model_name: Path("/tmp/model.gguf")  # type: ignore[method-assign]
 
-    result = adapter.run(prompt, RunOptions(model="llama-3"))
+    result = adapter.run(prompt, RunOptions(model="llama-3", timeout=17.25))
 
     assert result.exit_code == 0
     assert all(prompt not in arg for arg in spy.last_args)
     assert spy.stdin_value == prompt
+    assert spy.last_timeout == 17.25

@@ -16,6 +16,7 @@ from types import TracebackType
 from typing import Any
 
 from mrbench.core.config import get_default_data_path
+from mrbench.core.redaction import redact_for_storage
 
 
 def get_default_db_path() -> Path:
@@ -313,13 +314,15 @@ class Storage:
         job_id = _generate_id()
         created_at = _now_iso()
 
+        stored_preview = redact_for_storage(prompt_preview)
+
         conn = self._get_conn()
         conn.execute(
             """
             INSERT INTO jobs (id, run_id, provider, model, prompt_hash, prompt_preview, status, created_at)
             VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
             """,
-            (job_id, run_id, provider, model, prompt_hash, prompt_preview, created_at),
+            (job_id, run_id, provider, model, prompt_hash, stored_preview, created_at),
         )
         conn.commit()
 
@@ -331,7 +334,7 @@ class Storage:
             prompt_hash=prompt_hash,
             status="pending",
             created_at=created_at,
-            prompt_preview=prompt_preview,
+            prompt_preview=stored_preview,
         )
 
     def start_job(self, job_id: str) -> None:
@@ -351,6 +354,7 @@ class Storage:
     ) -> None:
         """Mark a job as completed."""
         status = "completed" if exit_code == 0 else "failed"
+        stored_error = redact_for_storage(error_message)
         conn = self._get_conn()
         conn.execute(
             """
@@ -358,7 +362,7 @@ class Storage:
             SET status = ?, completed_at = ?, exit_code = ?, error_message = ?
             WHERE id = ?
             """,
-            (status, _now_iso(), exit_code, error_message, job_id),
+            (status, _now_iso(), exit_code, stored_error, job_id),
         )
         conn.commit()
 

@@ -3,6 +3,7 @@
 from mrbench.core.redaction import (
     count_redactions,
     has_secrets,
+    redact_for_storage,
     redact_secrets,
 )
 
@@ -41,3 +42,15 @@ def test_count_redactions():
     text = "key1=sk-abc123def456ghi789jkl key2=ghp_1234567890abcdefghijklmnopqrstuvwxyz1234"
     count = count_redactions(text)
     assert count == 2
+
+
+def test_redact_for_storage_handles_none():
+    assert redact_for_storage(None) is None
+
+
+def test_redact_for_storage_redacts_secret_values():
+    text = "auth failed for token sk-abcdefghijklmnopqrstuv"
+    result = redact_for_storage(text)
+    assert result is not None
+    assert "[REDACTED]" in result
+    assert "sk-abcdefghijklmnopqrstuv" not in result

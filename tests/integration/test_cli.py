@@ -13,6 +13,7 @@ from mrbench.cli import bench as bench_module
 from mrbench.cli import detect as detect_module
 from mrbench.cli import discover as discover_module
 from mrbench.cli import models as models_module
+from mrbench.cli import providers as providers_module
 from mrbench.cli import report as report_module
 from mrbench.cli import route as route_module
 from mrbench.cli import run as run_module
@@ -55,6 +56,11 @@ def _parse_json_output(text: str) -> Any:
     raise AssertionError("Failed to parse JSON output")
 
 
+def _parse_raw_json_output(text: str) -> Any:
+    """Parse strict raw JSON output without fallback cleanup logic."""
+    return json.loads(text)
+
+
 class TestDoctorCommand:
     """Tests for mrbench doctor."""
 
@@ -67,6 +73,12 @@ class TestDoctorCommand:
         # Should return valid JSON even if no providers
         assert "python_version" in result.stdout or result.exit_code == 1
 
+    def test_doctor_json_output_is_raw_parseable(self):
+        result = runner.invoke(app, ["doctor", "--json"])
+        assert result.exit_code == 0
+        payload = _parse_raw_json_output(result.stdout)
+        assert "python_version" in payload
+
 
 class TestProvidersCommand:
     """Tests for mrbench providers."""
@@ -75,6 +87,33 @@ class TestProvidersCommand:
         result = runner.invoke(app, ["providers"])
         assert result.exit_code == 0
         assert "fake" in result.stdout.lower()
+
+    def test_providers_json_output_is_raw_parseable_with_long_values(self, monkeypatch):
+        class _Adapter:
+            name = "fake-provider"
+            display_name = "Fake Provider " + ("x" * 120)
+
+            def detect(self) -> DetectionResult:
+                return DetectionResult(
+                    detected=True,
+                    binary_path="/bin/fake-provider",
+                    version="v" + ("9" * 160),
+                    auth_status="authenticated",
+                    trusted=True,
+                )
+
+            def get_capabilities(self) -> AdapterCapabilities:
+                return AdapterCapabilities(name=self.name, offline=False)
+
+        class _Registry:
+            def list_all(self):
+                return [_Adapter()]
+
+        monkeypatch.setattr(providers_module, "get_default_registry", lambda: _Registry())
+        result = runner.invoke(app, ["providers", "--json"])
+        assert result.exit_code == 0
+        payload = _parse_raw_json_output(result.stdout)
+        assert payload[0]["name"] == "fake-provider"
 
 
 class TestModelsCommand:
@@ -282,6 +321,27 @@ class TestModelsCommand:
         assert "No models available for fake." in output
         assert "specify a model ID manually" in output
 
+    def test_models_json_output_is_raw_parseable_with_long_values(self, monkeypatch):
+        class _Adapter:
+            name = "provider-a"
+
+            def list_models(self) -> list[str]:
+                return ["model-" + ("m" * 200)]
+
+        class _Registry:
+            def get_available(self):
+                return [_Adapter()]
+
+            def get(self, provider: str):
+                _ = provider
+                return None
+
+        monkeypatch.setattr(models_module, "get_default_registry", lambda: _Registry())
+        result = runner.invoke(app, ["models", "--json"])
+        assert result.exit_code == 0
+        payload = _parse_raw_json_output(result.stdout)
+        assert "provider-a" in payload
+
 
 class TestRunCommand:
     """Tests for mrbench run."""
@@ -417,6 +477,71 @@ class TestRunCommand:
         assert "sk-abcdefghijklmnopqrstuv" not in payload["error"]
         assert "[REDACTED]" in payload["error"]
 
+    def test_run_json_output_is_raw_parseable_with_long_values(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text("Hello")
+
+        class _Adapter:
+            def is_available(self) -> bool:
+                return True
+
+            def run(self, prompt: str, options: object) -> RunResult:
+                _ = (prompt, options)
+                return RunResult(
+                    output="out-" + ("z" * 220),
+                    exit_code=0,
+                    wall_time_ms=3.5,
+                )
+
+        class _Registry:
+            def get(self, provider: str):
+                _ = provider
+                return _Adapter()
+
+            def list_names(self) -> list[str]:
+                return ["fake"]
+
+        monkeypatch.setattr(run_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(
+            app, ["run", "-p", "fake", "-m", "fake-fast", "--prompt", str(prompt_file), "--json"]
+        )
+        assert result.exit_code == 0
+        payload = _parse_raw_json_output(result.stdout)
+        assert payload["output"].startswith("out-")
+
+    def test_run_non_json_nonzero_exit_prints_redacted_error(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text("Hello")
+
+        class _Adapter:
+            def is_available(self) -> bool:
+                return True
+
+            def run(self, prompt: str, options: object) -> RunResult:
+                _ = (prompt, options)
+                return RunResult(
+                    output="",
+                    exit_code=9,
+                    wall_time_ms=3.5,
+                    error="bad token sk-abcdefghijklmnopqrstuv",
+                )
+
+        class _Registry:
+            def get(self, provider: str):
+                _ = provider
+                return _Adapter()
+
+            def list_names(self) -> list[str]:
+                return ["fake"]
+
+        monkeypatch.setattr(run_module, "get_default_registry", lambda: _Registry())
+        result = runner.invoke(app, ["run", "-p", "fake", "-m", "fake-fast", "--prompt", str(prompt_file)])
+        assert result.exit_code == 9
+        output = _strip_ansi(result.stdout)
+        assert "[REDACTED]" in output
+        assert "sk-abcdefghijklmnopqrstuv" not in output
+
 
 class TestRouteCommand:
     """Tests for mrbench route."""
@@ -528,6 +653,35 @@ class TestRouteCommand:
         assert payload["streaming"] is True
         assert any("preference order" in reason for reason in payload["explanation"])
 
+    def test_route_json_output_is_raw_parseable_with_long_values(self, monkeypatch, tmp_path):
+        prompt_file = tmp_path / "prompt.txt"
+        prompt_file.write_text("Test prompt")
+
+        class _Adapter:
+            name = "fake"
+
+            def get_capabilities(self) -> AdapterCapabilities:
+                return AdapterCapabilities(name=self.name, offline=True, streaming=True)
+
+            def list_models(self) -> list[str]:
+                return ["model-" + ("q" * 210)]
+
+        class _Registry:
+            def get_available(self):
+                return [_Adapter()]
+
+        monkeypatch.setattr(route_module, "get_default_registry", lambda: _Registry())
+        monkeypatch.setattr(
+            route_module,
+            "load_config",
+            lambda: SimpleNamespace(routing=SimpleNamespace(preference_order=["fake"]), providers={}),
+        )
+
+        result = runner.invoke(app, ["route", "--prompt", str(prompt_file), "--json", "--explain"])
+        assert result.exit_code == 0
+        payload = _parse_raw_json_output(result.stdout)
+        assert payload["provider"] == "fake"
+
 
 class TestDiscoverCommand:
     """Tests for mrbench discover."""
@@ -560,6 +714,32 @@ class TestDiscoverCommand:
         assert calls == [True]
 
         payload = json.loads(_strip_ansi(result.stdout))
+        assert payload["installed"][0]["name"] == "codex"
+
+    def test_discover_json_output_is_raw_parseable_with_long_values(self, monkeypatch):
+        class _FakeDetector:
+            def discover_cli_tools(self, check_auth: bool = False):
+                _ = check_auth
+                return {
+                    "installed": [
+                        {
+                            "name": "codex",
+                            "path": "/bin/" + ("c" * 180),
+                            "has_config": True,
+                            "config_path": "/tmp/" + ("cfg" * 60),
+                            "auth_status": "authenticated",
+                        }
+                    ],
+                    "configured": [{"name": "codex"}],
+                    "ready": [{"name": "codex"}],
+                    "not_found": [],
+                }
+
+        monkeypatch.setattr(discover_module, "ConfigDetector", lambda: _FakeDetector())
+
+        result = runner.invoke(app, ["discover", "--json"])
+        assert result.exit_code == 0
+        payload = _parse_raw_json_output(result.stdout)
         assert payload["installed"][0]["name"] == "codex"
 
     def test_discover_rich_all_and_auth_statuses(self, monkeypatch):
@@ -753,6 +933,22 @@ class TestDetectCommand:
         assert len(payload["providers"]) == 1
         assert payload["providers"][0]["display_name"] == "Fake Provider"
 
+    def test_detect_json_output_is_raw_parseable_with_long_values(self, monkeypatch):
+        class _LongAdapter(self._FakeAdapter):
+            def list_models(self) -> list[str]:
+                return ["model-" + ("x" * 220)]
+
+        class _Registry:
+            def list_all(self):
+                return [_LongAdapter()]
+
+        monkeypatch.setattr(detect_module, "get_default_registry", lambda: _Registry())
+
+        result = runner.invoke(app, ["detect", "--json"])
+        assert result.exit_code == 0
+        payload = _parse_raw_json_output(result.stdout)
+        assert payload["providers"][0]["name"] == "fake-provider"
+
 
 class TestBenchCommand:
     """Tests for mrbench bench."""
@@ -852,6 +1048,111 @@ prompts:
             jobs = storage.get_jobs_for_run(run_id)
             assert len(jobs) == 2
 
+    def test_bench_json_output_is_raw_parseable_with_long_output_dir(self, monkeypatch, tmp_path):
+        suite_path = self._write_suite(tmp_path)
+        long_out_dir = tmp_path / ("out-" + ("x" * 140))
+        db_path = tmp_path / "bench.db"
+
+        registry = self._FakeRegistry(self._FakeAdapter())
+        monkeypatch.setattr(bench_module, "get_default_registry", lambda: registry)
+        monkeypatch.setattr(bench_module, "Storage", lambda: Storage(db_path))
+
+        result = runner.invoke(
+            app,
+            [
+                "bench",
+                "--suite",
+                str(suite_path),
+                "--provider",
+                "fake-provider",
+                "--output-dir",
+                str(long_out_dir),
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0
+        payload = _parse_raw_json_output(result.stdout)
+        assert "run_id" in payload
+
+    def test_bench_without_store_prompts_keeps_prompt_preview_null(self, monkeypatch, tmp_path):
+        suite_path = tmp_path / "suite.yaml"
+        suite_path.write_text(
+            """
+name: Privacy Suite
+prompts:
+  - id: p1
+    text: "api_key=sk-abcdefghijklmnopqrstuv"
+""".strip()
+        )
+        out_dir = tmp_path / "out"
+        db_path = tmp_path / "bench.db"
+
+        registry = self._FakeRegistry(self._FakeAdapter())
+        monkeypatch.setattr(bench_module, "get_default_registry", lambda: registry)
+        monkeypatch.setattr(bench_module, "Storage", lambda: Storage(db_path))
+
+        result = runner.invoke(
+            app,
+            [
+                "bench",
+                "--suite",
+                str(suite_path),
+                "--provider",
+                "fake-provider",
+                "--output-dir",
+                str(out_dir),
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0
+        run_id = _parse_json_output(result.stdout)["run_id"]
+
+        with Storage(db_path) as storage:
+            jobs = storage.get_jobs_for_run(run_id)
+            assert len(jobs) == 1
+            assert jobs[0].prompt_preview is None
+
+    def test_bench_store_prompts_redacts_prompt_preview(self, monkeypatch, tmp_path):
+        suite_path = tmp_path / "suite.yaml"
+        suite_path.write_text(
+            """
+name: Privacy Suite
+prompts:
+  - id: p1
+    text: "api_key=sk-abcdefghijklmnopqrstuv"
+""".strip()
+        )
+        out_dir = tmp_path / "out"
+        db_path = tmp_path / "bench.db"
+
+        registry = self._FakeRegistry(self._FakeAdapter())
+        monkeypatch.setattr(bench_module, "get_default_registry", lambda: registry)
+        monkeypatch.setattr(bench_module, "Storage", lambda: Storage(db_path))
+
+        result = runner.invoke(
+            app,
+            [
+                "bench",
+                "--suite",
+                str(suite_path),
+                "--provider",
+                "fake-provider",
+                "--output-dir",
+                str(out_dir),
+                "--store-prompts",
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0
+        run_id = _parse_json_output(result.stdout)["run_id"]
+
+        with Storage(db_path) as storage:
+            jobs = storage.get_jobs_for_run(run_id)
+            assert len(jobs) == 1
+            assert jobs[0].prompt_preview is not None
+            assert "[REDACTED]" in jobs[0].prompt_preview
+            assert "sk-abcdefghijklmnopqrstuv" not in jobs[0].prompt_preview
+
     def test_bench_fails_for_missing_suite(self, tmp_path):
         missing_suite = tmp_path / "does-not-exist.yaml"
         result = runner.invoke(app, ["bench", "--suite", str(missing_suite)])
@@ -883,6 +1184,47 @@ prompts:
         )
         assert result.exit_code == 1
         assert "Provider not available" in _strip_ansi(result.stdout)
+
+    def test_bench_fails_for_malformed_suite_root(self, tmp_path):
+        suite_path = tmp_path / "suite.yaml"
+        suite_path.write_text("- one\n- two\n")
+        result = runner.invoke(app, ["bench", "--suite", str(suite_path)])
+        assert result.exit_code == 1
+        assert "Invalid suite format" in _strip_ansi(result.stdout)
+
+    def test_bench_fails_for_missing_prompts_key(self, tmp_path):
+        suite_path = tmp_path / "suite.yaml"
+        suite_path.write_text("name: Missing Prompts\n")
+        result = runner.invoke(app, ["bench", "--suite", str(suite_path)])
+        assert result.exit_code == 1
+        assert "No prompts in suite" in _strip_ansi(result.stdout)
+
+    def test_bench_fails_for_non_mapping_prompt_entry(self, tmp_path):
+        suite_path = tmp_path / "suite.yaml"
+        suite_path.write_text(
+            """
+name: Invalid Prompt Entry
+prompts:
+  - 123
+""".strip()
+        )
+        result = runner.invoke(app, ["bench", "--suite", str(suite_path)])
+        assert result.exit_code == 1
+        assert "Invalid prompt entry" in _strip_ansi(result.stdout)
+
+    def test_bench_fails_for_empty_prompt_text(self, tmp_path):
+        suite_path = tmp_path / "suite.yaml"
+        suite_path.write_text(
+            """
+name: Empty Prompt
+prompts:
+  - id: p1
+    text: "   "
+""".strip()
+        )
+        result = runner.invoke(app, ["bench", "--suite", str(suite_path)])
+        assert result.exit_code == 1
+        assert "Prompt text cannot be empty" in _strip_ansi(result.stdout)
 
 
 class TestHelpMessages:
@@ -926,6 +1268,30 @@ class TestReportCommand:
 
         payload = _parse_json_output(result.stdout)
         assert payload["providers"]["fake"]["avg_ttft_ms"] == 0.0
+
+    def test_report_json_output_is_raw_parseable_with_long_provider_keys(self, monkeypatch, tmp_path):
+        db_path = tmp_path / "report.db"
+        storage = Storage(db_path)
+        provider_name = "provider-" + ("z" * 140)
+
+        run = storage.create_run(suite_path="suites/basic.yaml")
+        job = storage.create_job(
+            run_id=run.id,
+            provider=provider_name,
+            model="fake-fast",
+            prompt_hash="abc123",
+        )
+        storage.start_job(job.id)
+        storage.complete_job(job.id, exit_code=0)
+        storage.add_metric(job.id, "wall_time_ms", 12.5, "ms")
+        storage.complete_run(run.id)
+
+        monkeypatch.setattr(report_module, "Storage", lambda: storage)
+
+        result = runner.invoke(app, ["report", run.id, "--format", "json"])
+        assert result.exit_code == 0
+        payload = _parse_raw_json_output(result.stdout)
+        assert provider_name in payload["providers"]
 
     def test_report_fails_when_run_not_found(self, monkeypatch, tmp_path):
         db_path = tmp_path / "report.db"

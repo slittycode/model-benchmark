@@ -109,7 +109,7 @@ def load_config(config_path: Path | None = None) -> MrbenchConfig:
         config_path = get_default_config_path()
 
     if not config_path.exists():
-        return DEFAULT_CONFIG
+        return DEFAULT_CONFIG.model_copy(deep=True)
 
     try:
         with open(config_path, "rb") as f:
@@ -120,7 +120,7 @@ def load_config(config_path: Path | None = None) -> MrbenchConfig:
         import warnings
 
         warnings.warn(f"Failed to load config from {config_path}: {e}", stacklevel=2)
-        return DEFAULT_CONFIG
+        return DEFAULT_CONFIG.model_copy(deep=True)
 
 
 def merge_config(base: MrbenchConfig, overrides: dict[str, Any]) -> MrbenchConfig:

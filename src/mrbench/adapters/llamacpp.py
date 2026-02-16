@@ -111,7 +111,7 @@ class LlamaCppAdapter(Adapter):
             "512",  # Max tokens
         ]
 
-        result = self._executor.run_with_stdin_prompt(args, prompt)
+        result = self._executor.run_with_stdin_prompt(args, prompt, timeout=options.timeout)
 
         return RunResult(
             output=result.stdout,

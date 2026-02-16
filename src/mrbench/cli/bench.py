@@ -17,6 +17,8 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from mrbench.adapters.base import RunOptions
 from mrbench.adapters.registry import get_default_registry
+from mrbench.cli._output import emit_json
+from mrbench.core.redaction import redact_for_storage
 from mrbench.core.storage import Storage, hash_prompt
 
 console = Console()
@@ -53,12 +55,30 @@ def bench_command(
     with open(suite) as f:
         suite_data = yaml.safe_load(f)
 
-    suite_name = suite_data.get("name", suite.stem)
-    prompts = suite_data.get("prompts", [])
+    if not isinstance(suite_data, dict):
+        console.print("[red]Invalid suite format: expected mapping at document root[/red]")
+        raise typer.Exit(1)
 
-    if not prompts:
+    raw_suite_name = suite_data.get("name", suite.stem)
+    suite_name = raw_suite_name if isinstance(raw_suite_name, str) and raw_suite_name else suite.stem
+    prompts_raw = suite_data.get("prompts")
+
+    if not isinstance(prompts_raw, list) or not prompts_raw:
         console.print("[red]No prompts in suite[/red]")
         raise typer.Exit(1)
+
+    prompts: list[dict[str, Any]] = []
+    for idx, prompt_entry in enumerate(prompts_raw):
+        if not isinstance(prompt_entry, dict):
+            console.print(f"[red]Invalid prompt entry at index {idx}[/red]")
+            raise typer.Exit(1)
+
+        prompt_text = prompt_entry.get("text")
+        if not isinstance(prompt_text, str) or not prompt_text.strip():
+            console.print(f"[red]Prompt text cannot be empty (index {idx})[/red]")
+            raise typer.Exit(1)
+
+        prompts.append(prompt_entry)
 
     registry = get_default_registry()
 
@@ -124,7 +144,9 @@ def bench_command(
                         provider=adapter.name,
                         model=model,
                         prompt_hash=hash_prompt(prompt_text),
-                        prompt_preview=prompt_text[:100] if prompt_text else None,
+                        prompt_preview=(
+                            redact_for_storage(prompt_text[:100]) if store_prompts else None
+                        ),
                     )
 
                     storage.start_job(job.id)
@@ -205,7 +227,7 @@ def bench_command(
         json.dump(results, f, indent=2)
 
     if json_output:
-        console.print(json.dumps({"run_id": run.id, "output_dir": str(run_dir)}, indent=2))
+        emit_json({"run_id": run.id, "output_dir": str(run_dir)})
     else:
         console.print(f"\n[green]✓ Completed benchmark run: {run.id}[/green]")
         console.print(f"[dim]Output: {run_dir}[/dim]")

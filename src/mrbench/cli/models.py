@@ -5,7 +5,6 @@ Lists available models for a provider.
 
 from __future__ import annotations
 
-import json
 from typing import Annotated
 
 import typer
@@ -13,6 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from mrbench.adapters.registry import get_default_registry
+from mrbench.cli._output import emit_json
 
 console = Console()
 
@@ -43,7 +43,7 @@ def models_command(
                 pass
 
         if json_output:
-            console.print(json.dumps(all_models, indent=2))
+            emit_json(all_models)
             return
 
         if not all_models:
@@ -74,7 +74,7 @@ def models_command(
         raise typer.Exit(1) from None
 
     if json_output:
-        console.print(json.dumps(models, indent=2))
+        emit_json(models)
         return
 
     if not models:

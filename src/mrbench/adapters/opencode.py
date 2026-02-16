@@ -65,7 +65,7 @@ class OpenCodeAdapter(Adapter):
         # Keep prompt out of argv to avoid process-list exposure.
         args = [binary, "-p", "-", "--quiet"]
 
-        result = self._executor.run_with_stdin_prompt(args, prompt)
+        result = self._executor.run_with_stdin_prompt(args, prompt, timeout=options.timeout)
 
         return RunResult(
             output=result.stdout,

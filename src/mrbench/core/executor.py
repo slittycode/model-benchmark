@@ -50,6 +50,7 @@ class SubprocessExecutor:
         stdin: str | None = None,
         cwd: str | None = None,
         stream_callback: Callable[[str], None] | None = None,
+        timeout: float | None = None,
     ) -> ExecutorResult:
         """Run a subprocess and capture output.
 
@@ -58,6 +59,7 @@ class SubprocessExecutor:
             stdin: Optional input to send to stdin.
             cwd: Optional working directory.
             stream_callback: Optional callback for each line of output (for streaming).
+            timeout: Optional timeout override in seconds for this invocation.
 
         Returns:
             ExecutorResult with stdout, stderr, timing, etc.
@@ -69,6 +71,7 @@ class SubprocessExecutor:
         ttft_ms: float | None = None
         timed_out = False
         exit_code = -1
+        effective_timeout = self.timeout if timeout is None else timeout
 
         try:
             # Build environment
@@ -100,13 +103,14 @@ class SubprocessExecutor:
                     chunks,
                     stream_callback,
                     start_time,
+                    effective_timeout,
                 )
             else:
                 # Non-streaming mode: use communicate with timeout
                 try:
                     stdout, stderr = process.communicate(
                         input=stdin,
-                        timeout=self.timeout,
+                        timeout=effective_timeout,
                     )
                     stdout_data.append(stdout)
                     stderr_data.append(stderr)
@@ -151,6 +155,7 @@ class SubprocessExecutor:
         chunks: list[str],
         callback: Callable[[str], None],
         start_time: float,
+        timeout: float,
     ) -> tuple[float | None, bool]:
         """Stream output from process, collecting chunks and timing.
 
@@ -175,7 +180,7 @@ class SubprocessExecutor:
         if process.stderr:
             sel.register(process.stderr, selectors.EVENT_READ)
 
-        deadline = start_time + self.timeout
+        deadline = start_time + timeout
 
         try:
             while sel.get_map():
@@ -235,6 +240,7 @@ class SubprocessExecutor:
         prompt: str,
         cwd: str | None = None,
         stream_callback: Callable[[str], None] | None = None,
+        timeout: float | None = None,
     ) -> ExecutorResult:
         """Run command with prompt sent via stdin.
 
@@ -246,8 +252,15 @@ class SubprocessExecutor:
             prompt: Prompt to send via stdin.
             cwd: Optional working directory.
             stream_callback: Optional streaming callback.
+            timeout: Optional timeout override in seconds for this invocation.
 
         Returns:
             ExecutorResult.
         """
-        return self.run(args, stdin=prompt, cwd=cwd, stream_callback=stream_callback)
+        return self.run(
+            args,
+            stdin=prompt,
+            cwd=cwd,
+            stream_callback=stream_callback,
+            timeout=timeout,
+        )

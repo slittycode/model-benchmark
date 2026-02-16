@@ -141,9 +141,10 @@ class OllamaAdapter(Adapter):
                 args,
                 stdin=prompt,
                 stream_callback=options.stream_callback,
+                timeout=options.timeout,
             )
         else:
-            result = self._executor.run_with_stdin_prompt(args, prompt)
+            result = self._executor.run_with_stdin_prompt(args, prompt, timeout=options.timeout)
 
         # Build result
         return RunResult(

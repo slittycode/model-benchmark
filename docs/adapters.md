@@ -7,12 +7,12 @@ mrbench uses adapters to interface with different AI CLI tools. Each adapter han
 | Adapter | Binary | Detection | Invocation |
 |---------|--------|-----------|------------|
 | `fake` | (builtin) | Always detected | Returns mock responses for testing |
-| `ollama` | `ollama` | `ollama --version` | `ollama run <model> --nowordwrap` |
-| `claude` | `claude` | `claude --version` | `claude -p "<prompt>" --output-format text` |
-| `codex` | `codex` | `codex --version` | `codex exec "<prompt>"` |
-| `gemini` | `gemini` | `gemini --version` | `gemini -p "<prompt>"` |
-| `goose` | `goose` | `goose --version` | `goose run "<prompt>"` |
-| `opencode` | `opencode` | `opencode --version` | `opencode -p "<prompt>" --quiet` |
+| `ollama` | `ollama` | `ollama --version` | `ollama run <model>` (prompt via stdin) |
+| `claude` | `claude` | `claude --version` | `claude -p - --output-format text` |
+| `codex` | `codex` | `codex --version` | `codex exec -` |
+| `gemini` | `gemini` | `gemini --version` | `gemini -p -` |
+| `goose` | `goose` | `goose --version` | `goose run -` |
+| `opencode` | `opencode` | `opencode --version` | `opencode -p - --quiet` |
 
 ## Adding a New Adapter
 
@@ -32,6 +32,8 @@ Adapters gracefully handle missing binaries:
 
 - `detect()` returns `DetectionResult(detected=False, error="<binary> not found")`
 - `run()` returns `RunResult(exit_code=127, error="<binary> not found")`
+
+All adapter runs receive a per-invocation timeout from `RunOptions.timeout`, so `mrbench run --timeout` is enforced consistently.
 
 ### Example: Goose (Not Installed)
 

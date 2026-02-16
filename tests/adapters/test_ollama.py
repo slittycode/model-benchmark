@@ -169,8 +169,9 @@ def test_run_stream_path_uses_executor_run(monkeypatch) -> None:
         stdin: str | None = None,
         cwd: str | None = None,
         stream_callback: object | None = None,
+        timeout: float | None = None,
     ) -> ExecutorResult:
-        _ = (cwd, stream_callback)
+        _ = (cwd, stream_callback, timeout)
         calls.append((args, stdin or ""))
         return ExecutorResult(
             stdout="streamed",

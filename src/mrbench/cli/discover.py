@@ -5,13 +5,13 @@ Discovers all AI CLI tools and their configurations on the system.
 
 from __future__ import annotations
 
-import json
 from typing import Annotated
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from mrbench.cli._output import emit_json
 from mrbench.core.discovery import ConfigDetector
 
 console = Console()
@@ -40,7 +40,7 @@ def discover_command(
     results = detector.discover_cli_tools(check_auth=check_auth)
 
     if json_output:
-        console.print(json.dumps(results, indent=2))
+        emit_json(results)
         return
 
     # Rich output

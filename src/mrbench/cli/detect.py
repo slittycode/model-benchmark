@@ -14,6 +14,7 @@ import typer
 from rich.console import Console
 
 from mrbench.adapters.registry import get_default_registry
+from mrbench.cli._output import emit_json
 from mrbench.core.config import get_default_data_path
 
 console = Console()
@@ -87,7 +88,7 @@ def detect_command(
             console.print(f"[green]✓ Wrote capabilities to {cache_file}[/green]")
 
     if json_output:
-        console.print(json.dumps(results, indent=2))
+        emit_json(results)
     elif not write:
         # Pretty print summary
         console.print(f"\n[bold]Detected {len(results['providers'])} providers:[/bold]\n")

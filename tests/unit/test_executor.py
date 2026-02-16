@@ -78,6 +78,17 @@ def test_run_timeout_marks_timed_out_and_falls_back_to_kill(monkeypatch):
     assert result.exit_code != 0
 
 
+def test_run_honors_per_call_timeout_override():
+    executor = SubprocessExecutor(timeout=2.0)
+    result = executor.run(
+        _python_cmd("import time; time.sleep(5)"),
+        timeout=0.05,
+    )
+
+    assert result.timed_out is True
+    assert result.exit_code != 0
+
+
 def test_run_streaming_collects_chunks_and_ttft():
     code = (
         "import sys,time; "
@@ -126,3 +137,15 @@ def test_run_with_stdin_prompt_delegates_to_run():
 
     assert result.exit_code == 0
     assert "prompt-via-stdin" in result.stdout
+
+
+def test_run_with_stdin_prompt_honors_timeout_override():
+    executor = SubprocessExecutor(timeout=2.0)
+    result = executor.run_with_stdin_prompt(
+        _python_cmd("import time; time.sleep(5)"),
+        prompt="prompt-via-stdin",
+        timeout=0.05,
+    )
+
+    assert result.timed_out is True
+    assert result.exit_code != 0

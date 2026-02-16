@@ -38,6 +38,14 @@ def test_load_config_missing_file_uses_defaults(tmp_path: Path):
     assert config.general.timeout == DEFAULT_CONFIG.general.timeout
 
 
+def test_load_config_missing_file_returns_independent_copy(tmp_path: Path):
+    config_a = load_config(tmp_path / "missing.toml")
+    config_a.routing.preference_order.append("mutated-provider")
+
+    config_b = load_config(tmp_path / "missing.toml")
+    assert "mutated-provider" not in config_b.routing.preference_order
+
+
 def test_config_validates_timeout_positive():
     with pytest.raises(ValueError):
         GeneralConfig(timeout=-1)
@@ -65,6 +73,19 @@ def test_load_config_invalid_toml_warns_and_uses_defaults(tmp_path: Path):
         config = load_config(config_file)
 
     assert config.general.timeout == DEFAULT_CONFIG.general.timeout
+
+
+def test_load_config_invalid_toml_returns_independent_copy(tmp_path: Path):
+    config_file = tmp_path / "invalid.toml"
+    config_file.write_text("[general\ninvalid = true")
+
+    with pytest.warns(UserWarning):
+        config_a = load_config(config_file)
+    config_a.routing.preference_order.append("mutated-provider")
+
+    with pytest.warns(UserWarning):
+        config_b = load_config(config_file)
+    assert "mutated-provider" not in config_b.routing.preference_order
 
 
 def test_merge_config_deep_merge():

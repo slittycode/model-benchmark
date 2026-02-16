@@ -5,7 +5,6 @@ Lists detected providers/adapters.
 
 from __future__ import annotations
 
-import json
 from typing import Annotated, TypedDict
 
 import typer
@@ -13,6 +12,7 @@ from rich.console import Console
 from rich.table import Table
 
 from mrbench.adapters.registry import get_default_registry
+from mrbench.cli._output import emit_json
 
 console = Console()
 
@@ -58,7 +58,7 @@ def providers_command(
         )
 
     if json_output:
-        console.print(json.dumps(providers, indent=2))
+        emit_json(providers)
         return
 
     if not providers:

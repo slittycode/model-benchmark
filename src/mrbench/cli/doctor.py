@@ -5,7 +5,6 @@ Checks system prerequisites and shows detected providers.
 
 from __future__ import annotations
 
-import json
 import platform
 from typing import Annotated, Any
 
@@ -15,6 +14,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from mrbench.adapters.registry import get_default_registry
+from mrbench.cli._output import emit_json
 
 console = Console()
 
@@ -55,7 +55,7 @@ def doctor_command(
         results["providers"].append(provider_info)
 
     if json_output:
-        console.print(json.dumps(results, indent=2))
+        emit_json(results)
         return
 
     # Rich output

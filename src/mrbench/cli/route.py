@@ -5,7 +5,6 @@ Chooses best provider based on constraints.
 
 from __future__ import annotations
 
-import json
 import sys
 from pathlib import Path
 from typing import Annotated, Any
@@ -14,6 +13,7 @@ import typer
 from rich.console import Console
 
 from mrbench.adapters.registry import get_default_registry
+from mrbench.cli._output import emit_json
 from mrbench.core.config import load_config
 
 console = Console()
@@ -138,7 +138,7 @@ def route_command(
         result["explanation"] = reasons
 
     if json_output:
-        console.print(json.dumps(result, indent=2))
+        emit_json(result)
     else:
         console.print(f"[bold]Provider:[/bold] [cyan]{result['provider']}[/cyan]")
         console.print(f"[bold]Model:[/bold] {result['model']}")

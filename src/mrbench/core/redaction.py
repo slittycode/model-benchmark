@@ -60,6 +60,16 @@ def redact_secrets(text: str, placeholder: str = REDACTION_PLACEHOLDER) -> str:
     return result
 
 
+def redact_for_storage(
+    text: str | None,
+    placeholder: str = REDACTION_PLACEHOLDER,
+) -> str | None:
+    """Redact a nullable string before persistence in storage."""
+    if text is None:
+        return None
+    return redact_secrets(text, placeholder)
+
+
 def redact_command_args(args: list[str], placeholder: str = REDACTION_PLACEHOLDER) -> list[str]:
     """Redact secrets from command line arguments.
 

@@ -63,9 +63,13 @@ def test_goose_run_success_and_error_propagation(monkeypatch) -> None:
     calls: list[tuple[list[str], str]] = []
 
     def _run(
-        args: list[str], prompt: str, cwd: str | None = None, stream_callback: object | None = None
+        args: list[str],
+        prompt: str,
+        cwd: str | None = None,
+        stream_callback: object | None = None,
+        timeout: float | None = None,
     ) -> ExecutorResult:
-        _ = (cwd, stream_callback)
+        _ = (cwd, stream_callback, timeout)
         calls.append((args, prompt))
         return ExecutorResult(
             stdout="ok output",

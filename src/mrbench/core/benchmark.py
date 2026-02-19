@@ -164,7 +164,9 @@ class BenchmarkOrchestrator:
                     model=model,
                     prompt_hash=hash_prompt(prompt.text),
                     prompt_preview=(
-                        redact_for_storage(prompt.text[:100]) if store_prompts and prompt.text else None
+                        redact_for_storage(prompt.text[:100])
+                        if store_prompts and prompt.text
+                        else None
                     ),
                 )
                 self._storage.start_job(job.id)

@@ -536,7 +536,9 @@ class TestRunCommand:
                 return ["fake"]
 
         monkeypatch.setattr(run_module, "get_default_registry", lambda: _Registry())
-        result = runner.invoke(app, ["run", "-p", "fake", "-m", "fake-fast", "--prompt", str(prompt_file)])
+        result = runner.invoke(
+            app, ["run", "-p", "fake", "-m", "fake-fast", "--prompt", str(prompt_file)]
+        )
         assert result.exit_code == 9
         output = _strip_ansi(result.stdout)
         assert "[REDACTED]" in output
@@ -674,7 +676,9 @@ class TestRouteCommand:
         monkeypatch.setattr(
             route_module,
             "load_config",
-            lambda: SimpleNamespace(routing=SimpleNamespace(preference_order=["fake"]), providers={}),
+            lambda: SimpleNamespace(
+                routing=SimpleNamespace(preference_order=["fake"]), providers={}
+            ),
         )
 
         result = runner.invoke(app, ["route", "--prompt", str(prompt_file), "--json", "--explain"])
@@ -1269,7 +1273,9 @@ class TestReportCommand:
         payload = _parse_json_output(result.stdout)
         assert payload["providers"]["fake"]["avg_ttft_ms"] == 0.0
 
-    def test_report_json_output_is_raw_parseable_with_long_provider_keys(self, monkeypatch, tmp_path):
+    def test_report_json_output_is_raw_parseable_with_long_provider_keys(
+        self, monkeypatch, tmp_path
+    ):
         db_path = tmp_path / "report.db"
         storage = Storage(db_path)
         provider_name = "provider-" + ("z" * 140)

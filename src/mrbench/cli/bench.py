@@ -60,7 +60,9 @@ def bench_command(
         raise typer.Exit(1)
 
     raw_suite_name = suite_data.get("name", suite.stem)
-    suite_name = raw_suite_name if isinstance(raw_suite_name, str) and raw_suite_name else suite.stem
+    suite_name = (
+        raw_suite_name if isinstance(raw_suite_name, str) and raw_suite_name else suite.stem
+    )
     prompts_raw = suite_data.get("prompts")
 
     if not isinstance(prompts_raw, list) or not prompts_raw:

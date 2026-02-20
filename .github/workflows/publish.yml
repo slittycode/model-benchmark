@@ -42,7 +42,7 @@ jobs:
       - name: Check package metadata
         run: |
           uv pip install twine
-          twine check dist/*
+          uv run twine check dist/*
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1

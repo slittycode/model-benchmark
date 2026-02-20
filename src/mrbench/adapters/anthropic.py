@@ -6,6 +6,7 @@ Wraps the Anthropic API for running LLM inference.
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 from mrbench.adapters.base import (
@@ -17,7 +18,6 @@ from mrbench.adapters.base import (
 )
 
 ANTHROPIC_MODELS = [
-    "claude-sonnet-4-20250514",
     "claude-sonnet-4-20250514",
     "claude-3-opus-20240229",
     "claude-3-sonnet-20240229",
@@ -66,30 +66,39 @@ class AnthropicAdapter(Adapter):
         return self._client
 
     def detect(self) -> DetectionResult:
+        """Detect if Anthropic API is configured.
+
+        Checks for API key presence and format without making a paid API call.
+        """
         if self._api_key is None:
             return DetectionResult(
                 detected=False,
                 error="ANTHROPIC_API_KEY not set. Set it in your environment or pass api_key.",
             )
 
-        try:
-            client = self._get_client()
-            client.messages.create(
-                model="claude-3-haiku-20240307",
-                max_tokens=1,
-                messages=[{"role": "user", "content": "hi"}],
-            )
-            return DetectionResult(
-                detected=True,
-                auth_status="authenticated",
-                trusted=True,
-            )
-        except Exception as e:
+        # Validate key format (Anthropic keys start with sk-ant-)
+        if not self._api_key.startswith("sk-ant-"):
             return DetectionResult(
                 detected=True,
                 auth_status="error",
-                error=f"API connection failed: {e}",
+                error="Invalid ANTHROPIC_API_KEY format. Expected key starting with 'sk-ant-'.",
             )
+
+        # Check if SDK is available
+        try:
+            self._get_client()
+        except ImportError as e:
+            return DetectionResult(
+                detected=False,
+                error=f"Anthropic SDK not installed: {e}. Install with: pip install mrbench[api]",
+            )
+
+        # SDK is available and key format is valid - assume configured
+        return DetectionResult(
+            detected=True,
+            auth_status="authenticated",
+            trusted=True,
+        )
 
     def list_models(self) -> list[str]:
         return ANTHROPIC_MODELS
@@ -104,8 +113,6 @@ class AnthropicAdapter(Adapter):
             )
 
         try:
-            import time
-
             start_time = time.perf_counter()
             client = self._get_client()
 

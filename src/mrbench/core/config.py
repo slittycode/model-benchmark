@@ -58,7 +58,11 @@ class RoutingConstraints(BaseModel):
 
 
 class RoutingConfig(BaseModel):
-    """Routing configuration settings."""
+    """Routing configuration settings.
+
+    Note: preference_order defaults to cloud API providers (openai, anthropic)
+    first, followed by local CLI providers. Customize in config.toml if needed.
+    """
 
     default_policy: str = "preference"
     preference_order: list[str] = Field(

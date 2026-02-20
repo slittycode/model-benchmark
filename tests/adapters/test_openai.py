@@ -31,8 +31,9 @@ class TestOpenAIAdapter:
         with patch("mrbench.adapters.openai.OpenAIAdapter._get_client") as mock_client:
             mock_client.side_effect = ImportError("No module named 'openai'")
             result = adapter.detect()
-        assert result.detected is True
-        assert result.auth_status == "error"
+        # SDK not installed means not detected - provides helpful error
+        assert result.detected is False
+        assert "SDK not installed" in result.error
 
     def test_list_models_fallback(self):
         adapter = OpenAIAdapter()

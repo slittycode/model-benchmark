@@ -14,11 +14,15 @@ if TYPE_CHECKING:
 
 
 class RoutingPolicy(Enum):
-    """Available routing policies."""
+    """Available routing policies.
+
+    Note: FASTEST and CHEAPEST policies require historical data and are
+    not yet implemented. They currently fall back to PREFERENCE order.
+    """
 
     PREFERENCE = "preference"  # Use preference order
-    FASTEST = "fastest"  # Select based on historical latency
-    CHEAPEST = "cheapest"  # Select based on cost
+    FASTEST = "fastest"  # Select based on historical latency (NOT IMPLEMENTED)
+    CHEAPEST = "cheapest"  # Select based on cost (NOT IMPLEMENTED)
     OFFLINE_ONLY = "offline_only"  # Only local models
 
 

@@ -6,6 +6,7 @@ Wraps the OpenAI API for running LLM inference.
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 from mrbench.adapters.base import (
@@ -66,35 +67,56 @@ class OpenAIAdapter(Adapter):
         return self._client
 
     def detect(self) -> DetectionResult:
+        """Detect if OpenAI API is configured.
+
+        Checks for API key presence and format without making a paid API call.
+        """
         if self._api_key is None:
             return DetectionResult(
                 detected=False,
                 error="OPENAI_API_KEY not set. Set it in your environment or pass api_key.",
             )
 
-        try:
-            client = self._get_client()
-            client.models.list()
-            return DetectionResult(
-                detected=True,
-                auth_status="authenticated",
-                trusted=True,
-            )
-        except Exception as e:
+        # Validate key format (OpenAI keys start with sk-)
+        if not self._api_key.startswith("sk-"):
             return DetectionResult(
                 detected=True,
                 auth_status="error",
-                error=f"API connection failed: {e}",
+                error="Invalid OPENAI_API_KEY format. Expected key starting with 'sk-'.",
             )
 
+        # Check if SDK is available
+        try:
+            self._get_client()
+        except ImportError as e:
+            return DetectionResult(
+                detected=False,
+                error=f"OpenAI SDK not installed: {e}. Install with: pip install mrbench[api]",
+            )
+
+        # SDK is available and key format is valid - assume configured
+        return DetectionResult(
+            detected=True,
+            auth_status="authenticated",
+            trusted=True,
+        )
+
     def list_models(self) -> list[str]:
+        """List available OpenAI models.
+
+        Returns API models if available, otherwise returns known model list.
+        Note: Falls back to known models on any error (auth, network, etc).
+        For better error handling, check detect() first.
+        """
         try:
             client = self._get_client()
             models = client.models.list()
             return [m.id for m in models.data]
         except ImportError:
+            # SDK not installed
             return OPENAI_MODELS
         except Exception:
+            # Any other error (auth, network, rate limit) - return fallback
             return OPENAI_MODELS
 
     def run(self, prompt: str, options: RunOptions) -> RunResult:
@@ -107,8 +129,6 @@ class OpenAIAdapter(Adapter):
             )
 
         try:
-            import time
-
             start_time = time.perf_counter()
             client = self._get_client()
 

@@ -31,8 +31,9 @@ class TestAnthropicAdapter:
         with patch("mrbench.adapters.anthropic.AnthropicAdapter._get_client") as mock_client:
             mock_client.side_effect = ImportError("No module named 'anthropic'")
             result = adapter.detect()
-        assert result.detected is True
-        assert result.auth_status == "error"
+        # SDK not installed means not detected - provides helpful error
+        assert result.detected is False
+        assert "SDK not installed" in result.error
 
     def test_list_models_returns_defaults(self):
         adapter = AnthropicAdapter()

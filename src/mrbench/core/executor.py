@@ -6,6 +6,7 @@ streaming support, and metric collection.
 
 from __future__ import annotations
 
+import os
 import signal
 import subprocess
 import time
@@ -75,8 +76,6 @@ class SubprocessExecutor:
 
         try:
             # Build environment
-            import os
-
             env = os.environ.copy()
             if self.env:
                 env.update(self.env)
@@ -118,8 +117,6 @@ class SubprocessExecutor:
                     timed_out = True
                     # Kill the process group
                     try:
-                        import os
-
                         os.killpg(process.pid, signal.SIGKILL)
                     except (ProcessLookupError, PermissionError):
                         process.kill()
@@ -162,7 +159,6 @@ class SubprocessExecutor:
         Returns:
             Tuple of (time to first token in ms, timed_out flag).
         """
-        import os
         import selectors
 
         ttft_ms: float | None = None

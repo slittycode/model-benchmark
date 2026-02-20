@@ -53,6 +53,8 @@ class Router:
     ) -> None:
         self._policy = policy
         self._preference_order = preference_order or [
+            "openai",
+            "anthropic",
             "ollama",
             "claude",
             "codex",

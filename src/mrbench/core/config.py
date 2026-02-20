@@ -62,7 +62,16 @@ class RoutingConfig(BaseModel):
 
     default_policy: str = "preference"
     preference_order: list[str] = Field(
-        default_factory=lambda: ["ollama", "claude", "codex", "gemini", "goose", "opencode"]
+        default_factory=lambda: [
+            "openai",
+            "anthropic",
+            "ollama",
+            "claude",
+            "codex",
+            "gemini",
+            "goose",
+            "opencode",
+        ]
     )
     constraints: RoutingConstraints = Field(default_factory=RoutingConstraints)
 

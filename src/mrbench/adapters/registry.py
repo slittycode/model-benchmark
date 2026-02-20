@@ -118,6 +118,16 @@ def get_default_registry() -> AdapterRegistry:
         _default_registry.register(LlamaCppAdapter())
         _default_registry.register(VllmAdapter())
 
+        # API adapters (require optional dependencies)
+        try:
+            from mrbench.adapters.anthropic import AnthropicAdapter
+            from mrbench.adapters.openai import OpenAIAdapter
+
+            _default_registry.register(OpenAIAdapter())
+            _default_registry.register(AnthropicAdapter())
+        except ImportError:
+            pass  # SDKs not installed, skip API adapters
+
     return _default_registry
 
 

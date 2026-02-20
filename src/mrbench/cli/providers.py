@@ -37,7 +37,17 @@ def providers_command(
         typer.Option("--json", "-j", help="Output as JSON"),
     ] = False,
 ) -> None:
-    """List detected providers/adapters."""
+    """List detected providers/adapters.
+
+    Use --all to see all available adapters including those not yet detected.
+
+    For API providers (openai, anthropic), you may need to install the api extra:
+        pip install mrbench[api]
+
+    Then set your API key:
+        export OPENAI_API_KEY=sk-...
+        export ANTHROPIC_API_KEY=sk-ant-...
+    """
     registry = get_default_registry()
 
     providers: list[ProviderEntry] = []
@@ -79,3 +89,16 @@ def providers_command(
         table.add_row(p["name"], p["display_name"], status, ptype, version)
 
     console.print(table)
+
+    # Show hints for missing API providers
+    api_providers = ["openai", "anthropic"]
+    missing_api = [p for p in providers if p["name"] in api_providers and not p["detected"]]
+    if missing_api:
+        console.print("\n[yellow]Tip: For API providers, install the api extra:[/yellow]")
+        console.print("  [cyan]pip install mrbench[api][/cyan]")
+        console.print("Then set your API key:")
+        for p in missing_api:
+            if p["name"] == "openai":
+                console.print("  [cyan]export OPENAI_API_KEY=sk-...[/cyan]")
+            elif p["name"] == "anthropic":
+                console.print("  [cyan]export ANTHROPIC_API_KEY=sk-ant-...[/cyan]")

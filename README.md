@@ -5,6 +5,7 @@
 ## Features
 
 - 🔍 **Auto-discover** installed AI CLIs (Ollama, Claude Code, Codex CLI, Gemini CLI, etc.)
+- ☁️ **API support** for OpenAI and Anthropic (via optional extra)
 - 🔀 **Route** prompts to the best available backend based on constraints
 - 📊 **Benchmark** across multiple providers with detailed metrics
 - 📝 **Report** results in Markdown with comparisons
@@ -18,10 +19,13 @@
 # Using uv (recommended)
 uv pip install mrbench
 
+# With API support (OpenAI + Anthropic)
+uv pip install mrbench[api]
+
 # Or from source
 git clone https://github.com/yourusername/mrbench
 cd mrbench
-uv sync
+uv sync --extra api
 ```
 
 ## Quick Start
@@ -30,17 +34,19 @@ uv sync
 # Check what's installed
 mrbench doctor
 
-# Detect available providers
-mrbench detect
+# Detect available providers (use --all to see all adapters)
+mrbench providers --all
 
-# Discover tool/config status (no auth checks by default)
-mrbench discover
-
-# Include auth checks explicitly when needed
-mrbench discover --check-auth
-
-# Run a prompt
+# Run a prompt with local CLI
 echo "What is 2 + 2?" | mrbench run --provider ollama --model llama3.2 --prompt -
+
+# Run with OpenAI API
+export OPENAI_API_KEY=sk-...
+mrbench run --provider openai --model gpt-4o-mini --prompt "Hello"
+
+# Run with Anthropic API
+export ANTHROPIC_API_KEY=sk-ant-...
+mrbench run --provider anthropic --model claude-3-haiku --prompt "Hello"
 
 # Auto-route to best provider
 echo "Explain quantum computing" | mrbench route --prompt - --explain

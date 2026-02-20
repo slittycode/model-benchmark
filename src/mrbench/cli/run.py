@@ -23,11 +23,15 @@ console = Console()
 def run_command(
     provider: Annotated[
         str,
-        typer.Option("--provider", "-p", help="Provider name (e.g., 'ollama')"),
+        typer.Option(
+            "--provider",
+            "-p",
+            help="Provider name (e.g., 'ollama', 'openai', 'anthropic')",
+        ),
     ],
     model: Annotated[
         str,
-        typer.Option("--model", "-m", help="Model name (e.g., 'llama3.2')"),
+        typer.Option("--model", "-m", help="Model name (e.g., 'llama3.2', 'gpt-4o-mini')"),
     ],
     prompt: Annotated[
         str,
@@ -46,7 +50,13 @@ def run_command(
         typer.Option("--timeout", "-t", help="Timeout in seconds"),
     ] = 300.0,
 ) -> None:
-    """Run a single prompt against a provider."""
+    """Run a single prompt against a provider.
+
+    Examples:
+        mrbench run --provider ollama --model llama3.2 --prompt "Hello"
+        mrbench run --provider openai --model gpt-4o-mini --prompt - < input.txt
+        mrbench run --provider anthropic --model claude-3-haiku --prompt "Hi" --json
+    """
     registry = get_default_registry()
 
     # Get adapter
@@ -56,8 +66,19 @@ def run_command(
         console.print(f"Available: {', '.join(registry.list_names())}")
         raise typer.Exit(1)
 
+    # Check availability with helpful error messages
     if not adapter.is_available():
-        console.print(f"[red]Provider '{provider}' is not available.[/red]")
+        if provider == "openai":
+            console.print(f"[yellow]Provider '{provider}' is not available.[/yellow]")
+            console.print("Install API support: [cyan]pip install mrbench[api][/cyan]")
+            console.print("Set your API key: [cyan]export OPENAI_API_KEY=sk-...[/cyan]")
+        elif provider == "anthropic":
+            console.print(f"[yellow]Provider '{provider}' is not available.[/yellow]")
+            console.print("Install API support: [cyan]pip install mrbench[api][/cyan]")
+            console.print("Set your API key: [cyan]export ANTHROPIC_API_KEY=sk-ant-...[/cyan]")
+        else:
+            console.print(f"[yellow]Provider '{provider}' is not available.[/yellow]")
+            console.print("Run 'mrbench doctor' for details.")
         raise typer.Exit(1)
 
     # Read prompt

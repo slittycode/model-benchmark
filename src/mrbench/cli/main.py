@@ -20,9 +20,28 @@ console = Console()
 
 app = typer.Typer(
     name="mrbench",
-    help="Model Router + Benchmark - Route prompts to AI CLIs and benchmark them.",
+    help="""Model Router + Benchmark - Route prompts to AI CLIs and benchmark them.
+
+Quick start:
+  mrbench doctor              # Check what's installed
+  mrbench providers --all     # See all available providers
+  mrbench run --provider fake --model fake-fast --prompt "Hello"
+
+For API providers (openai, anthropic), install the api extra:
+  pip install mrbench[api]
+
+Then set your API key:
+  export OPENAI_API_KEY=sk-...
+  export ANTHROPIC_API_KEY=sk-ant-...
+""",
     no_args_is_help=True,
     rich_markup_mode="rich",
+    epilog="""Examples:
+  mrbench run --provider ollama --model llama3.2 --prompt "What is 2+2?"
+  mrbench bench --suite suites/basic.yaml --provider fake
+  mrbench route --prompt "Write a function" --explain
+  mrbench models openai
+""",
 )
 
 

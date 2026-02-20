@@ -1,0 +1,50 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write  # Required for Trusted Publisher OIDC
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "0.5.14"
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --extra dev --extra api
+
+      - name: Run linting
+        run: |
+          uv run ruff check src tests
+          uv run ruff format --check src tests
+
+      - name: Run type checking
+        run: uv run mypy src
+
+      - name: Run tests
+        run: uv run pytest tests/ -v
+
+      - name: Build package
+        run: uv build
+
+      - name: Check package metadata
+        run: |
+          uv pip install twine
+          twine check dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}

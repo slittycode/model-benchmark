@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
+import pytest
 from typer.testing import CliRunner
 
 from mrbench.adapters.base import AdapterCapabilities, DetectionResult, RunResult
@@ -1230,6 +1231,86 @@ prompts:
         assert result.exit_code == 1
         assert "Prompt text cannot be empty" in _strip_ansi(result.stdout)
 
+    def test_bench_prompt_model_override_uses_fallback_and_records_metrics(
+        self, monkeypatch, tmp_path
+    ):
+        class _FallbackAdapter(self._FakeAdapter):
+            def __init__(self) -> None:
+                self.seen_models: list[str] = []
+
+            def list_models(self) -> list[str]:
+                return ["default-model"]
+
+            def run(self, prompt: str, options: object) -> RunResult:
+                _ = prompt
+                model = getattr(options, "model", "unknown")
+                self.seen_models.append(model)
+                if model == "claude-3-haiku-20240307":
+                    return RunResult(
+                        output="",
+                        exit_code=1,
+                        wall_time_ms=8.0,
+                        error="rate_limited",
+                    )
+                return RunResult(
+                    output="fallback-ok",
+                    exit_code=0,
+                    wall_time_ms=9.0,
+                    ttft_ms=1.0,
+                    token_count_input=12,
+                    token_count_output=34,
+                )
+
+        suite_path = tmp_path / "suite.yaml"
+        suite_path.write_text(
+            """
+name: Fallback Suite
+prompts:
+  - id: p1
+    text: "hello"
+    model_overrides:
+      fake-provider: claude-3-haiku-20240307
+    fallback_models:
+      fake-provider:
+        - claude-3-sonnet-20240229
+""".strip()
+        )
+        out_dir = tmp_path / "out"
+        db_path = tmp_path / "bench.db"
+
+        adapter = _FallbackAdapter()
+        registry = self._FakeRegistry(adapter)
+        monkeypatch.setattr(bench_module, "get_default_registry", lambda: registry)
+        monkeypatch.setattr(bench_module, "Storage", lambda: Storage(db_path))
+
+        result = runner.invoke(
+            app,
+            [
+                "bench",
+                "--suite",
+                str(suite_path),
+                "--provider",
+                "fake-provider",
+                "--output-dir",
+                str(out_dir),
+                "--json",
+            ],
+        )
+        assert result.exit_code == 0
+        run_id = _parse_json_output(result.stdout)["run_id"]
+        run_meta = json.loads((out_dir / run_id / "run_meta.json").read_text())
+        assert run_meta["jobs"][0]["model"] == "claude-3-sonnet-20240229"
+        assert run_meta["jobs"][0]["fallback_used"] is True
+
+        with Storage(db_path) as storage:
+            jobs = storage.get_jobs_for_run(run_id)
+            assert len(jobs) == 1
+            metrics = {m.metric_name: m.metric_value for m in storage.get_job_metrics(jobs[0].id)}
+            assert metrics["fallback_used"] == 1.0
+            assert metrics["input_tokens"] == 12.0
+            assert metrics["output_tokens"] == 34.0
+            assert metrics["total_tokens"] == 46.0
+
 
 class TestHelpMessages:
     """Tests for help output."""
@@ -1298,6 +1379,67 @@ class TestReportCommand:
         assert result.exit_code == 0
         payload = _parse_raw_json_output(result.stdout)
         assert provider_name in payload["providers"]
+
+    def test_report_json_includes_latency_token_error_and_fallback_rates(
+        self, monkeypatch, tmp_path
+    ):
+        db_path = tmp_path / "report.db"
+        storage = Storage(db_path)
+
+        run = storage.create_run(suite_path="suites/basic.yaml")
+
+        job1 = storage.create_job(
+            run_id=run.id,
+            provider="fake",
+            model="model-a",
+            prompt_hash="h1",
+        )
+        storage.start_job(job1.id)
+        storage.complete_job(job1.id, exit_code=0)
+        storage.add_metric(job1.id, "wall_time_ms", 10.0, "ms")
+        storage.add_metric(job1.id, "input_tokens", 20.0, "tokens")
+        storage.add_metric(job1.id, "output_tokens", 30.0, "tokens")
+        storage.add_metric(job1.id, "total_tokens", 50.0, "tokens")
+        storage.add_metric(job1.id, "fallback_used", 0.0, "ratio")
+
+        job2 = storage.create_job(
+            run_id=run.id,
+            provider="fake",
+            model="model-a",
+            prompt_hash="h2",
+        )
+        storage.start_job(job2.id)
+        storage.complete_job(job2.id, exit_code=1, error_message="boom")
+        storage.add_metric(job2.id, "fallback_used", 1.0, "ratio")
+
+        job3 = storage.create_job(
+            run_id=run.id,
+            provider="fake",
+            model="model-b",
+            prompt_hash="h3",
+        )
+        storage.start_job(job3.id)
+        storage.complete_job(job3.id, exit_code=0)
+        storage.add_metric(job3.id, "wall_time_ms", 20.0, "ms")
+        storage.add_metric(job3.id, "input_tokens", 10.0, "tokens")
+        storage.add_metric(job3.id, "output_tokens", 15.0, "tokens")
+        storage.add_metric(job3.id, "total_tokens", 25.0, "tokens")
+        storage.add_metric(job3.id, "fallback_used", 0.0, "ratio")
+        storage.complete_run(run.id)
+
+        monkeypatch.setattr(report_module, "Storage", lambda: storage)
+
+        result = runner.invoke(app, ["report", run.id, "--format", "json"])
+        assert result.exit_code == 0
+        payload = _parse_json_output(result.stdout)
+        provider = payload["providers"]["fake"]
+
+        assert provider["latency_ms"]["avg"] == pytest.approx(15.0)
+        assert provider["token_usage"]["input_tokens"] == 30.0
+        assert provider["token_usage"]["output_tokens"] == 45.0
+        assert provider["token_usage"]["total_tokens"] == 75.0
+        assert provider["error_rate"] == pytest.approx(1 / 3)
+        assert provider["fallback_rate"] == pytest.approx(1 / 3)
 
     def test_report_fails_when_run_not_found(self, monkeypatch, tmp_path):
         db_path = tmp_path / "report.db"
@@ -1375,3 +1517,53 @@ class TestReportCommand:
         output = _strip_ansi(result.stdout)
         assert "# Benchmark Report:" in output
         assert "Generated by mrbench" in output
+
+    def test_report_aws_support_markdown_writes_file_when_run_directory_exists(
+        self, monkeypatch, tmp_path
+    ):
+        db_path = tmp_path / "report.db"
+        storage = Storage(db_path)
+
+        run = storage.create_run(suite_path="suites/hobbyist_anthropic_baseline.yaml")
+        job = storage.create_job(
+            run_id=run.id,
+            provider="anthropic",
+            model="claude-3-sonnet-20240229",
+            prompt_hash="abc123",
+        )
+        storage.start_job(job.id)
+        storage.complete_job(job.id, exit_code=0)
+        storage.add_metric(job.id, "wall_time_ms", 123.0, "ms")
+        storage.add_metric(job.id, "input_tokens", 42.0, "tokens")
+        storage.add_metric(job.id, "output_tokens", 84.0, "tokens")
+        storage.add_metric(job.id, "total_tokens", 126.0, "tokens")
+        storage.add_metric(job.id, "fallback_used", 0.0, "ratio")
+        storage.complete_run(run.id)
+
+        output_dir = tmp_path / "out"
+        run_dir = output_dir / run.id
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        monkeypatch.setattr(report_module, "Storage", lambda: storage)
+
+        result = runner.invoke(
+            app,
+            [
+                "report",
+                run.id,
+                "--output-dir",
+                str(output_dir),
+                "--format",
+                "aws-support-markdown",
+            ],
+        )
+        assert result.exit_code == 0
+        output = _strip_ansi(result.stdout).replace("\n", "")
+        report_file = run_dir / "report_aws_support.md"
+        assert report_file.exists()
+        assert f"Report written to {report_file}" in output
+
+        report_text = report_file.read_text()
+        assert "AWS Support Case Attachment" in report_text
+        assert "Error Rate" in report_text
+        assert "Fallback Rate" in report_text

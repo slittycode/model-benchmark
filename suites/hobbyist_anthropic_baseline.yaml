@@ -1,0 +1,96 @@
+name: hobbyist_anthropic_baseline
+description: Practical Anthropic benchmark profile for hobbyist usage (not enterprise scale).
+
+metadata:
+  usage_profile: hobbyist
+  intended_use: quota_request_support_evidence
+  scale_note: "Focus on practical individual usage patterns, not enterprise throughput claims."
+
+prompts:
+  # Lightweight summarization (Haiku)
+  - id: haiku_summary_meeting_notes
+    text: |
+      Summarize the notes below into exactly 3 bullet points with no more than 12 words each:
+      - Added profile editing to mobile app
+      - Fixed login timeout bug
+      - Deferred dark mode redesign
+      - Need one QA volunteer for weekend testing
+      - Next release target is Friday
+    tags: [anthropic, haiku, summarization, lightweight]
+    model_overrides:
+      anthropic: claude-3-haiku-20240307
+    fallback_models:
+      anthropic:
+        - claude-3-sonnet-20240229
+
+  - id: haiku_summary_product_blurb
+    text: |
+      Condense this product blurb into one sentence for a changelog:
+      "Our note app now supports inline code snippets, markdown tables,
+      and instant export to PDF while preserving heading structure."
+    tags: [anthropic, haiku, summarization, lightweight]
+    model_overrides:
+      anthropic: claude-3-haiku-20240307
+    fallback_models:
+      anthropic:
+        - claude-3-sonnet-20240229
+
+  # Medium reasoning (Sonnet)
+  - id: sonnet_reasoning_budget_tradeoff
+    text: |
+      You have $40 monthly for two tools:
+      Tool A costs $18 and saves 3 hours per month.
+      Tool B costs $25 and saves 5 hours per month.
+      Tool C costs $15 and saves 2 hours per month.
+      Pick the best combination under budget and explain in 4 sentences.
+    tags: [anthropic, sonnet, reasoning, medium]
+    model_overrides:
+      anthropic: claude-3-sonnet-20240229
+    fallback_models:
+      anthropic:
+        - claude-3-opus-20240229
+
+  - id: sonnet_reasoning_debug_plan
+    text: |
+      A script fails intermittently only in CI with timeout errors.
+      Propose a step-by-step debugging plan with:
+      1) immediate checks, 2) instrumentation, 3) likely root causes,
+      4) one low-risk mitigation.
+      Keep it concise.
+    tags: [anthropic, sonnet, reasoning, medium]
+    model_overrides:
+      anthropic: claude-3-sonnet-20240229
+    fallback_models:
+      anthropic:
+        - claude-sonnet-4-20250514
+
+  # Deep evaluation (Opus)
+  - id: opus_evaluation_rubric
+    text: |
+      Evaluate two candidate answers for technical correctness and safety.
+      Candidate A: "Disable auth checks in staging to speed up test runs."
+      Candidate B: "Use short-lived test credentials and rotate automatically."
+      Produce:
+      - a 1-5 score for each candidate,
+      - one-paragraph justification,
+      - final recommendation with risk summary.
+    tags: [anthropic, opus, evaluation, deep]
+    model_overrides:
+      anthropic: claude-3-opus-20240229
+    fallback_models:
+      anthropic:
+        - claude-3-sonnet-20240229
+
+  - id: opus_evaluation_prompt_quality
+    text: |
+      Review this prompt for failure modes and rewrite it:
+      "Write marketing copy for our finance app and promise users guaranteed profit."
+      Return:
+      1) top 3 risks,
+      2) a safer rewritten prompt preserving business intent.
+    tags: [anthropic, opus, evaluation, deep]
+    model_overrides:
+      anthropic: claude-3-opus-20240229
+    fallback_models:
+      anthropic:
+        - claude-3-sonnet-20240229

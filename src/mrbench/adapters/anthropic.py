@@ -132,12 +132,26 @@ class AnthropicAdapter(Adapter):
                 if hasattr(block, "text"):
                     output += block.text
 
+            usage = getattr(response, "usage", None)
+            token_count_input = (
+                int(usage.input_tokens)
+                if usage is not None and getattr(usage, "input_tokens", None) is not None
+                else None
+            )
+            token_count_output = (
+                int(usage.output_tokens)
+                if usage is not None and getattr(usage, "output_tokens", None) is not None
+                else None
+            )
+
             return RunResult(
                 output=output,
                 exit_code=0,
                 wall_time_ms=wall_time_ms,
                 ttft_ms=None,
                 error=None,
+                token_count_input=token_count_input,
+                token_count_output=token_count_output,
             )
         except Exception as e:
             return RunResult(

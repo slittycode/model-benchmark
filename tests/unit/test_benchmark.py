@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import yaml
+
 from mrbench.adapters.base import (
     Adapter,
     AdapterCapabilities,
@@ -55,6 +57,21 @@ prompts:
     suite = BenchmarkSuite.from_yaml(suite_file)
 
     assert suite.name == "mysuite"  # Uses filename
+
+
+def test_hobbyist_anthropic_baseline_profile():
+    suite_file = Path(__file__).resolve().parents[2] / "suites" / "hobbyist_anthropic_baseline.yaml"
+    suite_data = yaml.safe_load(suite_file.read_text())
+
+    assert suite_data["name"] == "hobbyist_anthropic_baseline"
+    assert len(suite_data["prompts"]) >= 6
+
+    anthropic_models = {
+        prompt["model_overrides"]["anthropic"] for prompt in suite_data["prompts"]
+    }
+    assert "claude-3-haiku-20240307" in anthropic_models
+    assert "claude-3-sonnet-20240229" in anthropic_models
+    assert "claude-3-opus-20240229" in anthropic_models
 
 
 class _ZeroMetricAdapter(Adapter):

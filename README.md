@@ -56,6 +56,10 @@ mrbench bench --suite suites/basic.yaml
 
 # Generate report
 mrbench report <run_id>
+
+# Anthropic hobbyist evidence suite + AWS-support attachment
+mrbench bench --suite suites/hobbyist_anthropic_baseline.yaml --provider anthropic --output-dir out --json
+mrbench report <run_id> --output-dir out --format aws-support-markdown
 ```
 
 ## Commands
@@ -71,6 +75,9 @@ mrbench report <run_id>
 | `mrbench route` | Choose best provider based on constraints |
 | `mrbench bench` | Run benchmark suite across providers |
 | `mrbench report` | Generate summary report for a run |
+
+See [`docs/hobbyist_anthropic_baseline.md`](docs/hobbyist_anthropic_baseline.md) for
+quota-request oriented Anthropic usage guidance.
 
 ### JSON Contract
 

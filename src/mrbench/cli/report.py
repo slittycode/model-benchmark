@@ -111,9 +111,7 @@ def _build_provider_stats(providers: dict[str, list[ProviderJob]]) -> dict[str, 
             if "total_tokens" in provider_job["metrics"]
         )
         total_tokens = (
-            explicit_total_tokens
-            if explicit_total_tokens > 0
-            else input_tokens + output_tokens
+            explicit_total_tokens if explicit_total_tokens > 0 else input_tokens + output_tokens
         )
 
         total_jobs = len(pjobs)

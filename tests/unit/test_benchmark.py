@@ -66,9 +66,7 @@ def test_hobbyist_anthropic_baseline_profile():
     assert suite_data["name"] == "hobbyist_anthropic_baseline"
     assert len(suite_data["prompts"]) >= 6
 
-    anthropic_models = {
-        prompt["model_overrides"]["anthropic"] for prompt in suite_data["prompts"]
-    }
+    anthropic_models = {prompt["model_overrides"]["anthropic"] for prompt in suite_data["prompts"]}
     assert "claude-3-haiku-20240307" in anthropic_models
     assert "claude-3-sonnet-20240229" in anthropic_models
     assert "claude-3-opus-20240229" in anthropic_models

@@ -300,7 +300,10 @@ def bench_command(
                             "tokens",
                             is_estimated=result.tokens_estimated,
                         )
-                    if result.token_count_input is not None or result.token_count_output is not None:
+                    if (
+                        result.token_count_input is not None
+                        or result.token_count_output is not None
+                    ):
                         input_tokens = result.token_count_input or 0
                         output_tokens = result.token_count_output or 0
                         storage.add_metric(

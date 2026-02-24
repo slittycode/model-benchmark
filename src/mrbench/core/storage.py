@@ -366,6 +366,15 @@ class Storage:
         )
         conn.commit()
 
+    def set_job_model(self, job_id: str, model: str) -> None:
+        """Update the model recorded for a job."""
+        conn = self._get_conn()
+        conn.execute(
+            "UPDATE jobs SET model = ? WHERE id = ?",
+            (model, job_id),
+        )
+        conn.commit()
+
     def get_job(self, job_id: str) -> Job | None:
         """Get a job by ID."""
         conn = self._get_conn()

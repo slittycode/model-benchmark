@@ -46,7 +46,4 @@ jobs:
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          # Using OIDC Trusted Publisher - no password needed
-          # Requires setting up Trusted Publisher in PyPI project settings
-          # See: https://docs.pypi.org/trusted-publishers/
+        # no inputs needed; using OIDC Trusted Publisher
